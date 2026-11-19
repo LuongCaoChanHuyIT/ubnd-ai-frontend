@@ -12,6 +12,15 @@ Repo đã tích hợp sẵn [`vercel.json`](./vercel.json), [`api/ssr.js`](./api
    - `VITE_API_BASE_URL=https://<service-backend>.onrender.com` *(hỗ trợ upload trực tiếp tệp PDF/DOCX tới 10 MB lên Render; nếu để trống hệ thống vẫn tự động chuyển tiếp qua `/api/*` SSR proxy).*
 4. Bấm **Deploy**.
 
+### CI/CD tự động qua GitHub Actions (`.github/workflows/ci-deploy.yml`)
+
+Mỗi lần push hoặc mở Pull Request vào nhánh `main`, GitHub Actions tự động chạy toàn bộ bài kiểm thử đơn vị & khả năng tiếp cận (`npm test`), kiểm tra kiểu TypeScript (`npm run typecheck`), build SSR và smoke-test điểm vào `api/ssr.js`.
+
+Để bật tự động đẩy bản prebuilt trực tiếp từ GitHub Actions lên Vercel (`vercel deploy --prebuilt --prod`) ngay cả khi Vercel gắn với tài khoản GitHub khác, thêm 3 Repository Secrets trên GitHub:
+- `VERCEL_TOKEN`: Khóa truy cập Vercel (biến môi trường, không truyền qua cờ CLI)
+- `VERCEL_ORG_ID`: ID tổ chức/team Vercel (`team_...`)
+- `VERCEL_PROJECT_ID`: ID dự án Vercel (`prj_...`)
+
 ## Deploy bằng Docker trên Render.com (`render.yaml`) hoặc VPS
 
 ```bash
