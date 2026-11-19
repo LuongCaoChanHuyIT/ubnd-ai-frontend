@@ -3,7 +3,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseNd30PreviewSections } from "../app/lib/nd30-paper-helpers.ts";
+import {
+  parseNd30PreviewSections,
+  resolveEffectivePaperMode,
+  resolveNextPaperModeOnInput,
+} from "../app/lib/nd30-paper-helpers.ts";
 
 const APP_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -157,4 +161,105 @@ test("M01-M07 routes use ModuleHeader, ND30 paper sheet, MetricStrip, safe ViewT
       );
     }
   }
+});
+
+test("Final review fixes: ND30 two-column footer + long commune header, manual typing stability, Radix Tabs a11y, mobile Sheet close contrast, nav-active-pill z-index, global reduced-motion, h1 on /hello-check, and Progress aria-labels", () => {
+  // 1. Critical #1: Manual typing into empty DocumentPaperSheet stays in 'edit' mode; empty draft reports 'edit' as effective mode
+  assert.equal(resolveEffectivePaperMode("paper", ""), "edit");
+  assert.equal(resolveEffectivePaperMode("paper", "   "), "edit");
+  assert.equal(resolveEffectivePaperMode("paper", "Nội dung"), "paper");
+  assert.equal(resolveNextPaperModeOnInput("paper", "", "U"), "edit");
+  assert.equal(resolveNextPaperModeOnInput("edit", "U", "UB"), "edit");
+  assert.equal(resolveNextPaperModeOnInput("paper", "Đã có dự thảo", "Đã có dự thảo!"), "paper");
+
+  // 2. Important #2: Long commune name (<3 spaces before motto), line-0 leading space preservation, and two-column Nơi nhận + Signer footer
+  const fullNd30 = [
+    "ỦY BAN NHÂN DÂN                 CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
+    "PHƯỜNG NGUYỄN THÁI BÌNH TRUNG TÂM Độc lập - Tự do - Hạnh phúc",
+    "Số: 15/KH-UBND                  Nguyễn Thái Bình, ngày 19 tháng 11 năm 2026",
+    "",
+    "KẾ HOẠCH",
+    "Về việc chuyển đổi số quý IV/2026",
+    "",
+    "I. MỤC ĐÍCH, YÊU CẦU",
+    "Bảo đảm 100% hồ sơ trực tuyến.",
+    "",
+    "Nơi nhận:                        TM. ỦY BAN NHÂN DÂN",
+    "- Như trên;                      CHỦ TỊCH",
+    "- Đảng ủy, HĐND (để b/c);",
+    "- Lưu: VT, VP.                   (Chữ ký số, đóng dấu)",
+    "                                 Nguyễn Văn A",
+  ].join("\n");
+
+  const parsedFull = parseNd30PreviewSections(fullNd30);
+  assert.equal(parsedFull.hasStructuredHeader, true);
+  assert.deepEqual(parsedFull.agencyLines, [
+    "ỦY BAN NHÂN DÂN",
+    "PHƯỜNG NGUYỄN THÁI BÌNH TRUNG TÂM",
+  ]);
+  assert.deepEqual(parsedFull.mottoLines, [
+    "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
+    "Độc lập - Tự do - Hạnh phúc",
+  ]);
+  assert.deepEqual(parsedFull.recipientLines, [
+    "Nơi nhận:",
+    "- Như trên;",
+    "- Đảng ủy, HĐND (để b/c);",
+    "- Lưu: VT, VP.",
+  ]);
+  assert.deepEqual(parsedFull.signerLines, [
+    "TM. ỦY BAN NHÂN DÂN",
+    "CHỦ TỊCH",
+    "(Chữ ký số, đóng dấu)",
+    "Nguyễn Văn A",
+  ]);
+  assert.ok(!parsedFull.bodyLines.some((l) => l.includes("Nơi nhận:")));
+
+  const indentedFreeform = parseNd30PreviewSections("                CHỦ TỊCH");
+  assert.match(indentedFreeform.bodyLines[0], /^\s{12,}CHỦ TỊCH$/);
+
+  // 3. Important #4: DocumentPaperSheet uses Radix Tabs (tabpanel contract) and exposes compound Root/Toolbar/Canvas
+  const paperSrc = fs.readFileSync(
+    path.join(APP_DIR, "app/components/workspace/nd30-paper.tsx"),
+    "utf-8",
+  );
+  assert.match(paperSrc, /TabsContent/);
+  assert.match(paperSrc, /Root:/);
+  assert.match(paperSrc, /Toolbar:/);
+  assert.match(paperSrc, /Canvas:/);
+
+  // 4. Important #1 & #3: Mobile SheetContent hides default dark Close button and provides accessible Vietnamese SheetClose; nav-active-pill z-index > persistent-nav
+  const shellSrc = fs.readFileSync(
+    path.join(APP_DIR, "app/components/layout/workspace-shell.tsx"),
+    "utf-8",
+  );
+  assert.match(shellSrc, /showCloseButton=\{false\}/);
+  assert.match(shellSrc, /aria-label="Đóng trình đơn điều hướng"/);
+
+  const css = fs.readFileSync(path.join(APP_DIR, "app/app.css"), "utf-8");
+  assert.match(css, /::view-transition-group\(\.nav-active-pill\)[\s\S]*?z-index:\s*101/);
+  assert.match(
+    css,
+    /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?animation-duration:\s*0\.01ms\s*!important/,
+  );
+  assert.match(
+    css,
+    /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?transition-duration:\s*0\.01ms\s*!important/,
+  );
+
+  // 5. Re-graded Important #6: /hello-check h1 + Progress aria-labels in M03 & M06
+  const homeSrc = fs.readFileSync(path.join(APP_DIR, "app/routes/home.tsx"), "utf-8");
+  assert.match(homeSrc, /<h1\b/);
+
+  const m03Src = fs.readFileSync(
+    path.join(APP_DIR, "app/routes/m03-drafting.tsx"),
+    "utf-8",
+  );
+  assert.match(m03Src, /<Progress[^>]*aria-label=/);
+
+  const m06Src = fs.readFileSync(
+    path.join(APP_DIR, "app/routes/m06-tasks.tsx"),
+    "utf-8",
+  );
+  assert.match(m06Src, /<Progress[^>]*aria-label=/);
 });

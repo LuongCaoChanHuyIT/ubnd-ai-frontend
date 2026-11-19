@@ -610,7 +610,11 @@ export default function Module06TasksRoute({ loaderData }: Route.ComponentProps)
                               {t.progress}%
                             </span>
                           </div>
-                          <Progress value={t.progress} className="h-1.5" />
+                          <Progress
+                            value={t.progress}
+                            aria-label={`Tiến độ nhiệm vụ ${t.title}`}
+                            className="h-1.5"
+                          />
                         </div>
                       </TableCell>
                       <TableCell className="text-right whitespace-nowrap align-top">

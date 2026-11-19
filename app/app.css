@@ -208,6 +208,7 @@
 ::view-transition-group(.nav-active-pill) {
   animation-duration: 220ms;
   animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+  z-index: 101;
 }
 
 ::view-transition-old(.nav-active-pill),
@@ -241,6 +242,9 @@
   *::before,
   *::after {
     scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
   ::view-transition-old(*),
   ::view-transition-new(*),

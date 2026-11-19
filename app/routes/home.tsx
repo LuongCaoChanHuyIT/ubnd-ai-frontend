@@ -65,8 +65,10 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 <p className="text-xs font-semibold text-[#1B4D89]">
                   Chẩn đoán hạ tầng kết nối
                 </p>
-                <CardTitle className="text-xl font-bold text-slate-900">
-                  Bộ Trợ lý AI UBND Xã, Phường
+                <CardTitle>
+                  <h1 className="text-xl font-bold text-slate-900">
+                    Bộ Trợ lý AI UBND Xã, Phường
+                  </h1>
                 </CardTitle>
               </div>
             </div>

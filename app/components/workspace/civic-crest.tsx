@@ -37,3 +37,4 @@ export function CivicCrest({ className }: { className?: string }) {
     </svg>
   );
 }
+

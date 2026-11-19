@@ -81,6 +81,7 @@ export default function Module03DraftingRoute() {
       "Rà soát quy trình tiếp nhận hồ sơ tại Bộ phận Một cửa; Tăng cường số hóa hồ sơ theo Nghị định 61/2018/NĐ-CP và Nghị định 107/2021/NĐ-CP; Phân công rõ đầu mối phụ trách từng lĩnh vực",
   );
   const [draftText, setDraftText] = useState<string>("");
+  const [previewVersion, setPreviewVersion] = useState<number>(0);
   const [auditReport, setAuditReport] = useState<AuditReport | null>(null);
   const [busyDraft, setBusyDraft] = useState(false);
   const [busyAudit, setBusyAudit] = useState(false);
@@ -130,6 +131,7 @@ export default function Module03DraftingRoute() {
       });
       const finalDraft = res.draft_text;
       setDraftText(finalDraft);
+      setPreviewVersion((v) => v + 1);
 
       const audit = await apiRequest<AuditReport>("/api/m03/audit", {
         method: "POST",
@@ -396,6 +398,7 @@ export default function Module03DraftingRoute() {
             <DocumentPaperSheet
               value={draftText}
               onChange={setDraftText}
+              previewVersion={previewVersion}
               placeholder="Bấm 'Soạn dự thảo chuẩn NĐ 30/2020/NĐ-CP' hoặc dán trực tiếp nội dung dự thảo cần kiểm tra thể thức, căn cứ, thẩm quyền vào đây…"
               emptyHint="Sau khi sinh dự thảo, anh/chị có thể chuyển giữa 'Trang giấy NĐ30' (hiển thị khổ giấy công văn Noto Serif) và 'Soạn văn bản gốc' để chỉnh sửa."
             />
@@ -436,7 +439,11 @@ export default function Module03DraftingRoute() {
                         {auditReport.score}/100
                       </span>
                     </div>
-                    <Progress value={auditReport.score} className="h-2" />
+                    <Progress
+                      value={auditReport.score}
+                      aria-label="Điểm chuẩn hóa thể thức và nội dung"
+                      className="h-2"
+                    />
                     <p className="text-xs text-slate-700 leading-relaxed">
                       {auditReport.summary}
                     </p>

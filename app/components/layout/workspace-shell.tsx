@@ -26,6 +26,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   Upload,
+  X,
 } from "lucide-react";
 import {
   LEGAL_DISCLAIMER_TEXT,
@@ -57,7 +58,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
-import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "~/components/ui/sheet";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetTitle,
+  SheetTrigger,
+} from "~/components/ui/sheet";
 import { CivicCrest } from "~/components/workspace/civic-crest";
 import { cn } from "~/lib/utils";
 
@@ -344,7 +351,7 @@ export function WorkspaceShell({
         className={cn(
           "relative flex min-h-[40px] items-center gap-2.5 rounded-lg px-3 py-2 text-[12.5px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/80",
           active
-            ? "text-white"
+            ? "bg-[#1B4D89] text-white shadow-2xs"
             : "text-slate-300 hover:bg-[#152C4A] hover:text-white",
         )}
       >
@@ -357,13 +364,13 @@ export function WorkspaceShell({
             >
               <span
                 aria-hidden="true"
-                className="absolute inset-0 rounded-lg bg-[#1B4D89] border-l-2 border-l-[#F59E0B] shadow-2xs"
+                className="absolute left-0 inset-y-1.5 w-1 rounded-r-full bg-[#F59E0B]"
               />
             </ViewTransition>
           ) : (
             <span
               aria-hidden="true"
-              className="absolute inset-0 rounded-lg bg-[#1B4D89] border-l-2 border-l-[#F59E0B]"
+              className="absolute left-0 inset-y-1.5 w-1 rounded-r-full bg-[#F59E0B]"
             />
           ))}
         <Icon aria-hidden="true" className="relative z-10 h-4 w-4 shrink-0" />
@@ -390,6 +397,19 @@ export function WorkspaceShell({
                 {communeName}
               </p>
             </div>
+            {variant === "mobile" && (
+              <SheetClose asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Đóng trình đơn điều hướng"
+                  className="h-11 w-11 shrink-0 text-slate-200 hover:bg-white/10 hover:text-white"
+                >
+                  <X aria-hidden="true" className="h-4 w-4" />
+                </Button>
+              </SheetClose>
+            )}
           </div>
 
           {/* Active Tenant Switcher */}
@@ -604,6 +624,7 @@ export function WorkspaceShell({
               </SheetTrigger>
               <SheetContent
                 side="left"
+                showCloseButton={false}
                 className="p-0 w-[272px] border-r-0 overscroll-contain"
               >
                 <SheetTitle className="sr-only">
