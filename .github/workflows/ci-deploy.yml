@@ -1,0 +1,68 @@
+name: Frontend CI & Vercel Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  verify-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit, guidelines & accessibility tests
+        run: npm test
+
+      - name: Run TypeScript & React Router typecheck
+        run: npm run typecheck
+
+      - name: Build production client & SSR bundles
+        run: npm run build
+
+      - name: Smoke-test Vercel Node SSR entrypoint (api/ssr.js)
+        env:
+          API_BASE_URL: "http://127.0.0.1:1"
+        run: |
+          node --input-type=module -e '
+            import http from "node:http";
+            import handler from "./api/ssr.js";
+            const srv = http.createServer(handler);
+            await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+            const { port } = srv.address();
+            const res = await fetch(`http://127.0.0.1:${port}/hello-check`);
+            const html = await res.text();
+            srv.close();
+            if (res.status !== 200 || !html.includes("Bộ Trợ lý AI")) {
+              console.error("Unexpected SSR smoke response:", res.status);
+              process.exit(1);
+            }
+            console.log("SSR entrypoint smoke OK:", res.status);
+          '
+
+      - name: Deploy Prebuilt Output to Vercel (when secrets configured)
+        if: github.event_name != 'pull_request'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          if [ -n "$VERCEL_TOKEN" ] && [ -n "$VERCEL_ORG_ID" ] && [ -n "$VERCEL_PROJECT_ID" ]; then
+            npx --yes vercel@50 pull --yes --environment=production
+            npx --yes vercel@50 build --prod --yes
+            npx --yes vercel@50 deploy --prebuilt --prod --yes
+          else
+            echo "Skipping CLI Vercel deploy (VERCEL_TOKEN / VERCEL_ORG_ID / VERCEL_PROJECT_ID secrets not configured)."
+          fi
