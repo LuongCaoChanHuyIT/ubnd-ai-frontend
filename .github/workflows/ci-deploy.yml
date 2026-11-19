@@ -62,7 +62,8 @@ jobs:
           if [ -n "$VERCEL_TOKEN" ] && [ -n "$VERCEL_ORG_ID" ] && [ -n "$VERCEL_PROJECT_ID" ]; then
             npx --yes vercel@50 pull --yes --environment=production
             npx --yes vercel@50 build --prod --yes
-            npx --yes vercel@50 deploy --prebuilt --prod --yes
+            rm -rf .git
+            npx --yes vercel@50 deploy --prebuilt --prod --yes --meta commitSha="$GITHUB_SHA" --meta branch="$GITHUB_REF_NAME"
           else
             echo "Skipping CLI Vercel deploy (VERCEL_TOKEN / VERCEL_ORG_ID / VERCEL_PROJECT_ID secrets not configured)."
           fi
