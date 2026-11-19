@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { CheckCircle2, RefreshCw, Send, ServerCrash, Sparkles } from "lucide-react";
 import type { Route } from "./+types/home";
-import { fetchBackendHello, type HelloResult } from "~/lib/api";
+import {
+  fetchBackendHello,
+  resolveServerApiBase,
+  type HelloResult,
+} from "~/lib/api";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import {
@@ -26,7 +30,7 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function loader() {
-  const apiBase = process.env.API_BASE_URL ?? "http://127.0.0.1:8000";
+  const apiBase = resolveServerApiBase();
   const initialResult = await fetchBackendHello({ baseUrl: apiBase });
   return { apiBase, initialResult };
 }
@@ -40,7 +44,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     setLoading(true);
     try {
       const next = await fetchBackendHello({
-        baseUrl: "",
         name: customName,
       });
       setResult(next);

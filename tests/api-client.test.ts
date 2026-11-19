@@ -1,10 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import http from "node:http";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   ApiError,
   apiRequest,
   extractServerAuthHeaders,
+  fetchBackendHello,
   formatHttpErrorMessage,
   resolveClientApiBase,
   resolveServerApiBase,
@@ -328,6 +332,41 @@ test("apiRequest and uploadSessionFile default to VITE_API_BASE_URL when baseUrl
       "/api/health",
       "/api/m05/sessions/s1/upload?department_id=VP",
     ]);
+  } finally {
+    if (prevVite === undefined) delete process.env.VITE_API_BASE_URL;
+    else process.env.VITE_API_BASE_URL = prevVite;
+    server.close();
+  }
+});
+
+test("home route uses resolveServerApiBase and fetchBackendHello honors VITE_API_BASE_URL without hardcoded empty baseUrl", async () => {
+  const homeFile = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../app/routes/home.tsx",
+  );
+  const homeSrc = fs.readFileSync(homeFile, "utf-8");
+  assert.match(homeSrc, /resolveServerApiBase\(\)/);
+  assert.doesNotMatch(homeSrc, /baseUrl:\s*""/);
+
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(
+      JSON.stringify({
+        message: "Xin chào!",
+        service: "ubnd-ai-backend",
+        version: "1.0.0",
+        timestamp: "2026-11-19T00:00:00Z",
+      }),
+    );
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  const port = (server.address() as { port: number }).port;
+  const prevVite = process.env.VITE_API_BASE_URL;
+  process.env.VITE_API_BASE_URL = `http://127.0.0.1:${port}/`;
+
+  try {
+    const ping = await fetchBackendHello({ name: "UBND" });
+    assert.equal(ping.connected, true);
   } finally {
     if (prevVite === undefined) delete process.env.VITE_API_BASE_URL;
     else process.env.VITE_API_BASE_URL = prevVite;
