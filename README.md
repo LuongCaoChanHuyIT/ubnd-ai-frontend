@@ -2,43 +2,21 @@
 
 Ứng dụng giao diện 7 phân hệ nghiệp vụ UBND cấp xã, phường xây dựng trên **React Router v8.5 SSR**, **React 19**, **TypeScript** và **Tailwind CSS v4**.
 
-## Yêu cầu môi trường
+## Deploy miễn phí trên Vercel (`congtytnhhdaututh79-s-projects`) + Backend Render
 
-- Node.js `22+`
-- Kết nối tới dịch vụ Backend FastAPI (`ubnd-ai-backend`)
+Repo đã tích hợp sẵn [`vercel.json`](./vercel.json), [`api/ssr.js`](./api/ssr.js) và route proxy dự phòng `/api/*` (`app/routes/api-proxy.ts`):
+1. Truy cập `https://vercel.com/congtytnhhdaututh79-s-projects` → **Add New... → Project**.
+2. Chọn GitHub repository `LuongCaoChanHuyIT/ubnd-ai-frontend` (nhánh `main`, Framework Preset để **Other** theo `vercel.json`).
+3. Thêm biến môi trường:
+   - `API_BASE_URL=https://<service-backend>.onrender.com`
+   - `VITE_API_BASE_URL=https://<service-backend>.onrender.com` *(hỗ trợ upload trực tiếp tệp PDF/DOCX tới 10 MB lên Render; nếu để trống hệ thống vẫn tự động chuyển tiếp qua `/api/*` SSR proxy).*
+4. Bấm **Deploy**.
 
-## Cài đặt & Chạy môi trường phát triển
-
-```bash
-cp .env.example .env
-npm ci
-npm run dev
-```
-
-Mặc định trình duyệt chạy tại `http://localhost:5173` và proxy `/api` về `http://127.0.0.1:8000`.
-
-## Biến môi trường khi Deploy
-
-| Biến | Vai trò | Ví dụ |
-| :--- | :--- | :--- |
-| `PORT` | Cổng lắng nghe của tiến trình SSR | `3000` |
-| `API_BASE_URL` | Địa chỉ Backend để SSR server gọi trực tiếp | `http://127.0.0.1:8000` hoặc `https://api.tenmien.vn` |
-| `VITE_API_BASE_URL` | Địa chỉ Backend để trình duyệt gọi khi Frontend & Backend **khác domain/port** (cài lúc `npm run build`). Để rỗng nếu chạy chung sau Nginx cùng domain | `https://api.tenmien.vn` hoặc `""` |
-
-## Build & Chạy Production (Node.js trực tiếp)
-
-```bash
-VITE_API_BASE_URL=https://api.tenmien.vn npm ci
-VITE_API_BASE_URL=https://api.tenmien.vn npm run build
-
-NODE_ENV=production PORT=3000 API_BASE_URL=https://api.tenmien.vn npm run start
-```
-
-## Deploy bằng Docker
+## Deploy bằng Docker trên Render.com (`render.yaml`) hoặc VPS
 
 ```bash
 docker build \
-  --build-arg VITE_API_BASE_URL=https://api.tenmien.vn \
+  --build-arg VITE_API_BASE_URL=https://ubnd-ai-backend.onrender.com \
   -t ubnd-ai-frontend .
 
 docker run -d \
@@ -46,13 +24,16 @@ docker run -d \
   -p 3000:3000 \
   -e NODE_ENV=production \
   -e PORT=3000 \
-  -e API_BASE_URL=https://api.tenmien.vn \
+  -e API_BASE_URL=https://ubnd-ai-backend.onrender.com \
   ubnd-ai-frontend
 ```
 
-## Kiểm thử
+## Cài đặt & Kiểm thử Local
 
 ```bash
+cp .env.example .env
+npm ci
 npm test
 npm run typecheck
+npm run dev
 ```

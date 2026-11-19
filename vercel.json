@@ -1,0 +1,18 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "npm run build",
+  "outputDirectory": "build/client",
+  "functions": {
+    "api/ssr.js": {
+      "includeFiles": "build/server/**",
+      "maxDuration": 60
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/((?!assets/|favicon\\.ico).*)",
+      "destination": "/api/ssr"
+    }
+  ]
+}

@@ -14,6 +14,7 @@ import {
   resolveServerApiBase,
   uploadSessionFile,
 } from "../app/lib/api.ts";
+import { proxyApiRequest } from "../app/routes/api-proxy.ts";
 import {
   buildScopedSessionKey,
   createMemorySessionManager,
@@ -372,4 +373,149 @@ test("home route uses resolveServerApiBase and fetchBackendHello honors VITE_API
     else process.env.VITE_API_BASE_URL = prevVite;
     server.close();
   }
+});
+
+test("proxyApiRequest forwards GET, POST JSON, multipart upload, auth headers, and upstream 413 status", async () => {
+  const seen: Array<{ method: string; url: string; actor: string; tenant: string; bodyLen: number }> = [];
+  const upstream = http.createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (c: Buffer) => chunks.push(c));
+    req.on("end", () => {
+      const buf = Buffer.concat(chunks);
+      seen.push({
+        method: String(req.method ?? ""),
+        url: String(req.url ?? ""),
+        actor: String(req.headers["x-actor-email"] ?? ""),
+        tenant: String(req.headers["x-tenant-slug"] ?? ""),
+        bodyLen: buf.byteLength,
+      });
+      if ((req.url ?? "").startsWith("/api/oversize")) {
+        res.writeHead(413, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ detail: "Quá 10 MB" }));
+        return;
+      }
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ proxied: true, bytes: buf.byteLength }));
+    });
+  });
+  await new Promise<void>((r) => upstream.listen(0, "127.0.0.1", r));
+  const port = (upstream.address() as { port: number }).port;
+  const prevApi = process.env.API_BASE_URL;
+  process.env.API_BASE_URL = `http://127.0.0.1:${port}/`;
+
+  try {
+    const getRes = await proxyApiRequest(
+      new Request("https://ubnd-ai-frontend.vercel.app/api/m04/documents?department_id=VP", {
+        headers: {
+          "X-Actor-Email": "tsh.co@tshorg.vn",
+          "X-Tenant-Slug": "ubnd-hoa-xuan",
+        },
+      }),
+    );
+    assert.equal(getRes.status, 200);
+    assert.deepEqual(await getRes.json(), { proxied: true, bytes: 0 });
+
+    const form = new FormData();
+    form.append("file", new File([Buffer.from("pdf-binary-bytes")], "hs.pdf", { type: "application/pdf" }));
+    const upRes = await proxyApiRequest(
+      new Request("https://ubnd-ai-frontend.vercel.app/api/m05/sessions/s1/upload?department_id=KT", {
+        method: "POST",
+        headers: {
+          "X-Actor-Email": "canbo.kt@ubnd.vn",
+          "X-Tenant-Slug": "default",
+        },
+        body: form,
+      }),
+    );
+    assert.equal(upRes.status, 200);
+    const upJson = (await upRes.json()) as { bytes: number };
+    assert.ok(upJson.bytes > 16);
+
+    const errRes = await proxyApiRequest(
+      new Request("https://ubnd-ai-frontend.vercel.app/api/oversize", { method: "POST", body: "x" }),
+    );
+    assert.equal(errRes.status, 413);
+    assert.deepEqual(await errRes.json(), { detail: "Quá 10 MB" });
+
+    assert.equal(seen[0]?.url, "/api/m04/documents?department_id=VP");
+    assert.equal(seen[0]?.actor, "tsh.co@tshorg.vn");
+    assert.equal(seen[0]?.tenant, "ubnd-hoa-xuan");
+    assert.equal(seen[1]?.method, "POST");
+  } finally {
+    if (prevApi === undefined) delete process.env.API_BASE_URL;
+    else process.env.API_BASE_URL = prevApi;
+    upstream.close();
+  }
+});
+
+test("proxyApiRequest blocks self-proxy loops and returns 502 JSON when backend is unreachable", async () => {
+  const loopRes = await proxyApiRequest(
+    new Request("https://ubnd-ai-frontend.vercel.app/api/health", {
+      headers: { "X-UBND-Proxy-Hop": "1" },
+    }),
+  );
+  assert.equal(loopRes.status, 502);
+  const loopJson = (await loopRes.json()) as { detail: string };
+  assert.match(loopJson.detail, /vòng lặp|API_BASE_URL/i);
+
+  const prevApi = process.env.API_BASE_URL;
+  process.env.API_BASE_URL = "http://127.0.0.1:1";
+  try {
+    const downRes = await proxyApiRequest(
+      new Request("https://ubnd-ai-frontend.vercel.app/api/health"),
+    );
+    assert.equal(downRes.status, 502);
+    const downJson = (await downRes.json()) as { detail: string };
+    assert.match(downJson.detail, /502|Backend/i);
+  } finally {
+    if (prevApi === undefined) delete process.env.API_BASE_URL;
+    else process.env.API_BASE_URL = prevApi;
+  }
+});
+
+test("fetchBackendHello supports configurable cold-start timeoutMs and vercel.json disables framework preset", async () => {
+  const slowServer = http.createServer((_req, res) => {
+    setTimeout(() => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          message: "OK sau cold start",
+          service: "ubnd-ai-backend",
+          version: "1.0.0",
+          timestamp: "2026-11-19T00:00:00Z",
+        }),
+      );
+    }, 140);
+  });
+  await new Promise<void>((r) => slowServer.listen(0, "127.0.0.1", r));
+  const port = (slowServer.address() as { port: number }).port;
+
+  try {
+    const timedOut = await fetchBackendHello({
+      baseUrl: `http://127.0.0.1:${port}`,
+      timeoutMs: 40,
+    });
+    assert.equal(timedOut.connected, false);
+
+    const okDefault = await fetchBackendHello({
+      baseUrl: `http://127.0.0.1:${port}`,
+    });
+    assert.equal(okDefault.connected, true);
+  } finally {
+    slowServer.close();
+  }
+
+  const vercelPath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../vercel.json",
+  );
+  const vercelCfg = JSON.parse(fs.readFileSync(vercelPath, "utf-8")) as {
+    framework: unknown;
+    outputDirectory: string;
+    functions?: Record<string, { includeFiles?: string; maxDuration?: number }>;
+  };
+  assert.equal(vercelCfg.framework, null);
+  assert.equal(vercelCfg.outputDirectory, "build/client");
+  assert.equal(vercelCfg.functions?.["api/ssr.js"]?.maxDuration, 60);
+  assert.equal(vercelCfg.functions?.["api/ssr.js"]?.includeFiles, "build/server/**");
 });

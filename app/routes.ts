@@ -11,4 +11,5 @@ export default [
     route("quan-tri-he-thong", "routes/m07-admin.tsx"),
   ]),
   route("hello-check", "routes/home.tsx"),
+  route("api/*", "routes/api-proxy.ts"),
 ] satisfies RouteConfig;

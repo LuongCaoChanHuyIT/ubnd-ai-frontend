@@ -468,6 +468,7 @@ export async function wipeSessionState(
 export async function fetchBackendHello(options?: {
   baseUrl?: string;
   name?: string;
+  timeoutMs?: number;
 }): Promise<HelloResult> {
   const baseUrl = (options?.baseUrl ?? resolveClientApiBase())
     .trim()
@@ -476,12 +477,13 @@ export async function fetchBackendHello(options?: {
     ? `?name=${encodeURIComponent(options.name.trim())}`
     : "";
   const endpoint = `${baseUrl}/api/hello${query}`;
+  const timeoutMs = options?.timeoutMs ?? 35000;
   const startedAt = performance.now();
 
   try {
     const response = await fetch(endpoint, {
       headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(4000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     const latencyMs = Math.round(performance.now() - startedAt);
 
