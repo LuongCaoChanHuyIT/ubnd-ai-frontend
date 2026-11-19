@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { startTransition, useEffect, useRef, useState, ViewTransition } from "react";
 import {
   Link,
   useNavigate,
@@ -44,6 +44,8 @@ import {
   rotateSessionId,
   setSavedAssistantMode,
 } from "~/lib/session";
+import { CivicCrest } from "~/components/workspace/civic-crest";
+import { ModuleHeader } from "~/components/workspace/module-surface";
 import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -183,8 +185,10 @@ export default function Module01AssistantRoute({
           message: text,
         },
       });
-      setMessages(res.session.messages);
-      setFiles(res.session.files);
+      startTransition(() => {
+        setMessages(res.session.messages);
+        setFiles(res.session.files);
+      });
     } catch (err) {
       setStatusBanner({
         tone: "error",
@@ -292,60 +296,68 @@ export default function Module01AssistantRoute({
         onChange={handleFileSelect}
       />
 
-      <Card className="border-slate-200 bg-white shadow-xs rounded-xl overflow-hidden">
-        {/* Card Header */}
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-6 pt-5 pb-4">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-blue-600">
-              TRỢ LÝ NGHIỆP VỤ · {deptName.toUpperCase()}
-            </p>
-            <h2 className="mt-1 text-xl font-bold text-slate-900">
-              Anh/chị cần xử lý công việc gì?
-            </h2>
-          </div>
+      <ModuleHeader.Root>
+        <ModuleHeader.Content>
+          <ModuleHeader.Eyebrow>
+            Mô-đun 01 · Trợ lý nghiệp vụ · {deptName}
+          </ModuleHeader.Eyebrow>
+          <ModuleHeader.Title>
+            Anh/chị cần xử lý công việc gì?
+          </ModuleHeader.Title>
+          <ModuleHeader.Description>
+            Tra cứu căn cứ pháp lý, soạn thảo tham mưu và thẩm định hồ sơ trong không
+            gian làm việc cô lập của phòng {deptId}.
+          </ModuleHeader.Description>
+        </ModuleHeader.Content>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={uploading || busy}
-              onClick={() => fileInputRef.current?.click()}
-              className="gap-1.5 text-xs border-slate-200 text-slate-700"
-            >
-              <Upload className="h-3.5 w-3.5" />
-              {uploading
-                ? "Đang tải..."
-                : `Tải thêm tài liệu (${files.length} tệp)`}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={() => void handleWipeSession()}
-              className="gap-1.5 text-xs border-rose-200 bg-rose-50/70 text-rose-600 hover:bg-rose-100 hover:text-rose-700"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              Kết thúc phiên - Xóa bộ nhớ
-            </Button>
-          </div>
-        </div>
+        <ModuleHeader.Actions>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={uploading || busy}
+            onClick={() => fileInputRef.current?.click()}
+            className="gap-1.5 text-xs border-slate-200 bg-white text-slate-700 tabular-nums"
+          >
+            <Upload aria-hidden="true" className="h-3.5 w-3.5" />
+            {uploading
+              ? "Đang tải…"
+              : `Tải thêm tài liệu (${files.length} tệp)`}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={() => void handleWipeSession()}
+            className="gap-1.5 text-xs border-rose-200 bg-rose-50/80 text-rose-700 hover:bg-rose-100"
+          >
+            <Trash2 aria-hidden="true" className="h-3.5 w-3.5" />
+            Kết thúc phiên - Xóa bộ nhớ
+          </Button>
+        </ModuleHeader.Actions>
+      </ModuleHeader.Root>
 
+      <Card className="border-slate-200 bg-white shadow-2xs rounded-xl overflow-hidden py-0 gap-0">
         {/* 3 Mode Selector Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 px-6 pt-4">
+        <div
+          role="group"
+          aria-label="Chế độ làm việc của Trợ lý AI"
+          className="grid grid-cols-1 md:grid-cols-3 gap-3 px-5 sm:px-6 pt-5 pb-4 border-b border-slate-100"
+        >
           {ASSISTANT_MODES.map((item) => {
             const active = item.id === mode;
             return (
               <button
                 key={item.id}
                 type="button"
+                aria-pressed={active}
                 onClick={() => handleSelectMode(item.id)}
                 className={cn(
-                  "text-left rounded-xl border p-3.5 transition-all",
+                  "text-left rounded-xl border p-3.5 transition-colors",
                   active
-                    ? "border-blue-600 bg-blue-50/50 ring-1 ring-blue-600/30"
-                    : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/60",
+                    ? "border-[#1B4D89] bg-[#EEF4FB]/70 ring-1 ring-[#1B4D89]/25"
+                    : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70",
                 )}
               >
                 <div className="flex items-center justify-between gap-2">
@@ -357,8 +369,8 @@ export default function Module01AssistantRoute({
                     className={cn(
                       "text-[10px] font-bold px-2 py-0",
                       active
-                        ? "bg-blue-600 text-white"
-                        : "bg-slate-100 text-slate-600",
+                        ? "bg-[#1B4D89] text-white"
+                        : "bg-slate-100 text-slate-700",
                     )}
                   >
                     {item.badge}
@@ -374,41 +386,47 @@ export default function Module01AssistantRoute({
 
         {/* Status or Active Session Files Strip */}
         {(statusBanner || files.length > 0) && (
-          <div className="px-6 pt-3 space-y-2">
+          <div className="px-5 sm:px-6 pt-3 space-y-2">
             {statusBanner && (
-              <Alert
-                variant={statusBanner.tone === "error" ? "destructive" : "default"}
-                className={cn(
-                  "py-2.5",
-                  statusBanner.tone === "info" &&
-                    "border-emerald-200 bg-emerald-50 text-emerald-900",
-                )}
+              <div
+                role={statusBanner.tone === "error" ? "alert" : "status"}
+                aria-live="polite"
               >
-                <AlertDescription className="text-xs">
-                  {statusBanner.text}
-                </AlertDescription>
-              </Alert>
+                <Alert
+                  variant={statusBanner.tone === "error" ? "destructive" : "default"}
+                  className={cn(
+                    "py-2.5",
+                    statusBanner.tone === "info" &&
+                      "border-emerald-200 bg-emerald-50 text-emerald-900",
+                  )}
+                >
+                  <AlertDescription className="text-xs">
+                    {statusBanner.text}
+                  </AlertDescription>
+                </Alert>
+              </div>
             )}
 
             {files.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2">
-                <span className="text-xs font-semibold text-blue-800 flex items-center gap-1">
-                  <Paperclip className="h-3.5 w-3.5" />
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[#1B4D89]/20 bg-[#EEF4FB]/60 px-3 py-2">
+                <span className="text-xs font-semibold text-[#0C1E35] flex items-center gap-1 tabular-nums">
+                  <Paperclip aria-hidden="true" className="h-3.5 w-3.5 text-[#1B4D89]" />
                   Tệp trong phiên ({files.length}):
                 </span>
                 {files.map((f) => (
                   <Badge
                     key={f.file_id}
                     variant="outline"
-                    className="bg-white text-xs text-slate-700 border-blue-200 gap-1"
+                    className="bg-white text-xs text-slate-700 border-[#1B4D89]/25 gap-1"
                   >
-                    <FileText className="h-3 w-3 text-blue-600" />
+                    <FileText aria-hidden="true" className="h-3 w-3 text-[#1B4D89]" />
                     {f.filename}
                   </Badge>
                 ))}
                 <Link
                   to={`/xu-ly-tai-lieu?dept=${deptId}`}
-                  className="ml-auto text-xs font-medium text-blue-700 hover:underline whitespace-nowrap"
+                  viewTransition
+                  className="ml-auto text-xs font-medium text-[#1B4D89] hover:underline whitespace-nowrap"
                 >
                   Mở Xử lý & Đối chiếu tệp →
                 </Link>
@@ -418,19 +436,19 @@ export default function Module01AssistantRoute({
         )}
 
         {/* Conversation Body or Center Empty State */}
-        <div className="px-6 py-6 min-h-[300px] flex flex-col justify-center">
+        <div className="px-5 sm:px-6 py-6 min-h-[300px] flex flex-col justify-center">
           {messages.length === 0 ? (
             <div className="mx-auto max-w-lg text-center space-y-4 py-6">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-sm font-bold text-sm">
-                AI
+              <div className="mx-auto flex justify-center">
+                <CivicCrest className="h-12 w-12" />
               </div>
               <div className="space-y-1.5">
-                <h3 className="text-lg font-bold text-slate-900">
+                <h3 className="text-lg font-bold text-slate-900 text-balance">
                   Ta nên bắt đầu việc gì?
                 </h3>
-                <p className="text-xs sm:text-sm text-slate-500">
-                  Đặt câu hỏi, yêu cầu soạn thảo hoặc tải tài liệu lên để AI tham
-                  khảo trong phiên làm việc riêng của phòng {deptId}.
+                <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                  Đặt câu hỏi, yêu cầu soạn thảo hoặc tải tài liệu lên để AI đối
+                  chiếu trong phiên làm việc riêng của phòng {deptId}.
                 </p>
               </div>
               <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
@@ -442,7 +460,7 @@ export default function Module01AssistantRoute({
                     size="sm"
                     disabled={busy}
                     onClick={() => void handleSend(st.prompt, st.mode)}
-                    className="rounded-full text-xs border-slate-200 bg-slate-50 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200"
+                    className="rounded-full text-xs border-slate-200 bg-slate-50/80 hover:bg-[#EEF4FB] hover:text-[#1B4D89] hover:border-[#1B4D89]/30"
                   >
                     {st.label}
                   </Button>
@@ -450,69 +468,75 @@ export default function Module01AssistantRoute({
               </div>
             </div>
           ) : (
-            <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1">
+            <div className="space-y-4 max-h-[520px] overflow-y-auto pr-1">
               {messages.map((msg, idx) => {
                 const isUser = msg.role === "user";
                 return (
-                  <div
+                  <ViewTransition
                     key={`${msg.created_at}-${idx}`}
-                    className={cn(
-                      "flex flex-col gap-1.5",
-                      isUser ? "items-end" : "items-start",
-                    )}
+                    enter="slide-up"
+                    default="none"
                   >
                     <div
                       className={cn(
-                        "max-w-3xl rounded-2xl px-4 py-3 text-sm leading-relaxed",
-                        isUser
-                          ? "bg-blue-600 text-white whitespace-pre-wrap"
-                          : "border border-slate-200 bg-slate-50 text-slate-800 w-full",
+                        "flex flex-col gap-1.5",
+                        isUser ? "items-end" : "items-start",
                       )}
                     >
-                      {!isUser && (
-                        <div className="mb-2 flex items-center justify-between gap-2 flex-wrap">
-                          <Badge className="bg-blue-600 text-white text-[10px] px-2 py-0">
-                            <Sparkles className="h-2.5 w-2.5 mr-1" />
-                            {formatAssistantModeBadge(msg.mode)}
-                          </Badge>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleHandoffToM06(msg, idx)}
-                            className="h-6 px-2 text-[11px] gap-1 border-blue-200 bg-white text-blue-700 hover:bg-blue-50 whitespace-nowrap"
-                          >
-                            <CheckSquare className="h-3 w-3" />
-                            Giao việc từ tư vấn này (M06)
-                          </Button>
-                        </div>
-                      )}
-
-                      {isUser ? (
-                        msg.content
-                      ) : (
-                        <FormattedMarkdown content={msg.content} />
-                      )}
-
-                      {!isUser && msg.citations && msg.citations.length > 0 && (
-                        <div className="mt-3 pt-2.5 border-t border-slate-200/80 flex flex-wrap items-center gap-1.5">
-                          <span className="text-[11px] font-semibold text-slate-600 flex items-center gap-1">
-                            <BookOpen className="h-3 w-3 text-blue-600" />
-                            Nguồn đối chiếu:
-                          </span>
-                          {msg.citations.map((cit) => (
-                            <Link
-                              key={cit.doc_number}
-                              to={`/nguon-van-ban?dept=${deptId}&q=${encodeURIComponent(cit.doc_number)}`}
-                              className="inline-flex items-center rounded-md border border-blue-200 bg-white px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-50"
+                      <div
+                        className={cn(
+                          "max-w-3xl rounded-2xl px-4 py-3 text-sm leading-relaxed",
+                          isUser
+                            ? "bg-[#1B4D89] text-white whitespace-pre-wrap"
+                            : "border border-[#E5DEC9] bg-[#FCFBF7] text-slate-900 w-full",
+                        )}
+                      >
+                        {!isUser && (
+                          <div className="mb-2 flex items-center justify-between gap-2 flex-wrap">
+                            <Badge className="bg-[#0C1E35] text-white text-[10px] px-2 py-0">
+                              <Sparkles aria-hidden="true" className="h-2.5 w-2.5 mr-1 text-amber-300" />
+                              {formatAssistantModeBadge(msg.mode)}
+                            </Badge>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleHandoffToM06(msg, idx)}
+                              className="h-7 px-2.5 text-[11px] gap-1 border-[#1B4D89]/25 bg-white text-[#1B4D89] hover:bg-[#EEF4FB] whitespace-nowrap"
                             >
-                              {cit.doc_number} · {cit.title}
-                            </Link>
-                          ))}
-                        </div>
-                      )}
+                              <CheckSquare aria-hidden="true" className="h-3 w-3" />
+                              Giao việc từ tư vấn này (M06)
+                            </Button>
+                          </div>
+                        )}
+
+                        {isUser ? (
+                          msg.content
+                        ) : (
+                          <FormattedMarkdown content={msg.content} />
+                        )}
+
+                        {!isUser && msg.citations && msg.citations.length > 0 && (
+                          <div className="mt-3 pt-2.5 border-t border-[#E5DEC9] flex flex-wrap items-center gap-1.5">
+                            <span className="text-[11px] font-semibold text-slate-700 flex items-center gap-1">
+                              <BookOpen aria-hidden="true" className="h-3 w-3 text-[#B45309]" />
+                              Nguồn đối chiếu:
+                            </span>
+                            {msg.citations.map((cit) => (
+                              <Link
+                                key={cit.doc_number}
+                                to={`/nguon-van-ban?dept=${deptId}&q=${encodeURIComponent(cit.doc_number)}`}
+                                viewTransition
+                                className="inline-flex items-center rounded-md border border-[#1B4D89]/25 bg-white px-2 py-0.5 text-[11px] font-medium text-[#1B4D89] hover:bg-[#EEF4FB]"
+                              >
+                                {cit.doc_number} · {cit.title}
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  </ViewTransition>
                 );
               })}
             </div>
@@ -520,9 +544,13 @@ export default function Module01AssistantRoute({
         </div>
 
         {/* Bottom Chat Input Composer */}
-        <div className="border-t border-slate-100 bg-slate-50/60 px-6 py-4">
-          <div className="rounded-xl border border-slate-200 bg-white p-2.5 shadow-2xs focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/15">
+        <div className="border-t border-slate-200/80 bg-slate-50/70 px-5 sm:px-6 py-4">
+          <div className="rounded-xl border border-slate-300 bg-white p-2.5 shadow-2xs focus-within:border-[#1B4D89] focus-within:ring-2 focus-within:ring-[#1B4D89]/15">
+            <label htmlFor="m01-prompt-input" className="sr-only">
+              Nội dung câu hỏi hoặc yêu cầu nghiệp vụ
+            </label>
             <Textarea
+              id="m01-prompt-input"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
@@ -531,7 +559,7 @@ export default function Module01AssistantRoute({
                   void handleSend();
                 }
               }}
-              placeholder="Làm với bất kỳ nội dung nghiệp vụ nào..."
+              placeholder="Làm với bất kỳ nội dung nghiệp vụ nào…"
               rows={2}
               className="min-h-[54px] resize-none border-0 p-1.5 text-sm shadow-none focus-visible:ring-0"
             />
@@ -545,10 +573,10 @@ export default function Module01AssistantRoute({
                   onClick={() => fileInputRef.current?.click()}
                   className="h-7 px-2.5 text-xs text-slate-600 hover:text-slate-900 gap-1"
                 >
-                  <Plus className="h-3.5 w-3.5" />
+                  <Plus aria-hidden="true" className="h-3.5 w-3.5" />
                   Tải tài liệu lên
                 </Button>
-                <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-full">
+                <span className="text-xs font-medium text-[#1B4D89] bg-[#EEF4FB] px-2.5 py-0.5 rounded-full">
                   {currentModeMeta.title}
                 </span>
               </div>
@@ -559,13 +587,13 @@ export default function Module01AssistantRoute({
                 disabled={busy || !input.trim()}
                 onClick={() => void handleSend()}
                 aria-label="Gửi yêu cầu"
-                className="h-8 w-8 rounded-full bg-blue-600 hover:bg-blue-700 text-white shrink-0"
+                className="h-8 w-8 rounded-full bg-[#1B4D89] hover:bg-[#163E70] text-white shrink-0"
               >
-                <ArrowUp className="h-4 w-4" />
+                <ArrowUp aria-hidden="true" className="h-4 w-4" />
               </Button>
             </div>
           </div>
-          <p className="mt-2 text-center text-[11px] text-slate-400">
+          <p className="mt-2 text-center text-[11px] text-slate-500">
             Enter để gửi · Shift + Enter để xuống dòng · Tài liệu chỉ được dùng
             trong phiên hiện tại
           </p>

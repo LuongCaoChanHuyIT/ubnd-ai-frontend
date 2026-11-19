@@ -44,6 +44,7 @@ import {
   normalizeAdminTab,
   type AdminTabId,
 } from "~/lib/m06-m07-helpers";
+import { ModuleHeader } from "~/components/workspace/module-surface";
 import { cn } from "~/lib/utils";
 import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Badge } from "~/components/ui/badge";
@@ -217,10 +218,10 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
   if (loaderData.forbidden || isOfficer) {
     return (
       <div className="mx-auto max-w-2xl py-10">
-        <Card className="border-amber-200 bg-white shadow-xs">
+        <Card className="border-amber-200 bg-white shadow-2xs">
           <CardHeader className="space-y-2 text-center">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
-              <Lock className="h-6 w-6" />
+              <Lock aria-hidden="true" className="h-6 w-6" />
             </div>
             <CardTitle className="text-lg text-slate-900">
               Giới hạn quyền truy cập Quản trị hệ thống
@@ -231,9 +232,9 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
             </CardDescription>
           </CardHeader>
           <CardContent className="flex justify-center pb-6">
-            <Button asChild className="bg-blue-600 hover:bg-blue-700 text-white gap-2">
-              <Link to={`/?dept=${deptId}`}>
-                <ArrowLeft className="h-4 w-4" />
+            <Button asChild className="bg-[#1B4D89] hover:bg-[#163E70] text-white gap-2">
+              <Link to={`/?dept=${deptId}`} viewTransition>
+                <ArrowLeft aria-hidden="true" className="h-4 w-4" />
                 Quay về Trợ lý nghiệp vụ (Mô-đun 01 · Phòng {deptId})
               </Link>
             </Button>
@@ -431,29 +432,35 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-wider text-blue-600">
-            MÔ-ĐUN 07 · QUẢN TRỊ, PHÂN QUYỀN & NHÂN BẢN HỆ THỐNG ({communeNameDisplay.toUpperCase()})
-          </p>
-          <h2 className="text-xl font-bold text-slate-900">
+      <ModuleHeader.Root>
+        <ModuleHeader.Content>
+          <ModuleHeader.Eyebrow>
+            Mô-đun 07 · Quản trị, Phân quyền & Nhân bản hệ thống · {communeNameDisplay}
+          </ModuleHeader.Eyebrow>
+          <ModuleHeader.Title>
             Tổ chức tài khoản theo 4 nhóm nghiệp vụ & Triển khai độc lập cho từng xã, phường
-          </h2>
-        </div>
+          </ModuleHeader.Title>
+          <ModuleHeader.Description>
+            Phân quyền email công vụ, cấu hình Instruction chuyên môn cho từng phòng,
+            đấu nối LLM Gateway và nhân bản cơ sở dữ liệu độc lập.
+          </ModuleHeader.Description>
+        </ModuleHeader.Content>
 
         {activeTenantSlug !== "default" && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleReturnRootTenant}
-            className="gap-1.5 border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 text-xs whitespace-nowrap"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            Quay về đơn vị gốc
-          </Button>
+          <ModuleHeader.Actions>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleReturnRootTenant}
+              className="gap-1.5 border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 text-xs whitespace-nowrap"
+            >
+              <RotateCcw aria-hidden="true" className="h-3.5 w-3.5" />
+              Quay về đơn vị gốc
+            </Button>
+          </ModuleHeader.Actions>
         )}
-      </div>
+      </ModuleHeader.Root>
 
       {/* 4 Specialized Department Group Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -462,20 +469,20 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
             (u) => u.department_id === d.id,
           ).length;
           return (
-            <Card key={d.id} className="border-slate-200 shadow-xs">
+            <Card key={d.id} className="border-slate-200 shadow-2xs border-t-2 border-t-[#1B4D89]">
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                   <Badge variant="secondary" className="font-bold">
                     {d.code}
                   </Badge>
-                  <span className="text-xs font-semibold text-blue-700">
+                  <span className="text-xs font-semibold text-[#1B4D89] tabular-nums">
                     {count} tài khoản
                   </span>
                 </div>
                 <CardTitle className="text-sm pt-1">{d.name}</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-[11px] text-slate-500 line-clamp-2">
+                <p className="text-[11px] text-slate-600 line-clamp-2">
                   {d.scope_summary}
                 </p>
               </CardContent>
@@ -485,23 +492,31 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
       </div>
 
       {banner && (
-        <Alert
-          variant={banner.tone === "err" ? "destructive" : "default"}
-          className={
-            banner.tone === "ok"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-900 py-2.5"
-              : "py-2.5"
-          }
+        <div
+          role={banner.tone === "err" ? "alert" : "status"}
+          aria-live="polite"
         >
-          <AlertDescription className="text-xs flex items-center gap-1.5">
-            {banner.tone === "ok" ? (
-              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-            ) : (
-              <AlertTriangle className="h-4 w-4 shrink-0" />
-            )}
-            {banner.text}
-          </AlertDescription>
-        </Alert>
+          <Alert
+            variant={banner.tone === "err" ? "destructive" : "default"}
+            className={
+              banner.tone === "ok"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-900 py-2.5"
+                : "py-2.5"
+            }
+          >
+            <AlertDescription className="text-xs flex items-center gap-1.5">
+              {banner.tone === "ok" ? (
+                <CheckCircle2
+                  aria-hidden="true"
+                  className="h-4 w-4 text-emerald-600 shrink-0"
+                />
+              ) : (
+                <AlertTriangle aria-hidden="true" className="h-4 w-4 shrink-0" />
+              )}
+              {banner.text}
+            </AlertDescription>
+          </Alert>
+        </div>
       )}
 
       <Tabs
@@ -521,10 +536,10 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
           value="phan-quyen"
           className="grid grid-cols-1 lg:grid-cols-12 gap-4 pt-3"
         >
-          <Card className="lg:col-span-4 border-slate-200 shadow-xs h-fit">
+          <Card className="lg:col-span-4 border-slate-200 shadow-2xs h-fit">
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-1.5">
-                <ShieldCheck className="h-4 w-4 text-blue-600" />
+                <ShieldCheck aria-hidden="true" className="h-4 w-4 text-[#1B4D89]" />
                 Cấp quyền email cán bộ
               </CardTitle>
               <CardDescription className="text-xs">
@@ -534,41 +549,81 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
             </CardHeader>
             <CardContent>
               <form onSubmit={handleAddUser} className="space-y-3">
-                <Input
-                  type="email"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  placeholder="Email công vụ (VD: canbo.tp@ubnd.vn)"
-                  required
-                />
-                <Input
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Họ và tên cán bộ..."
-                  required
-                />
-                <Input
-                  value={newPosition}
-                  onChange={(e) => setNewPosition(e.target.value)}
-                  placeholder="Chức danh / Vị trí..."
-                />
-                <Select
-                  value={newUserDept}
-                  onValueChange={(v) => setNewUserDept(v as DepartmentId)}
-                >
-                  <SelectTrigger className="w-full min-w-0">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="VP">Văn phòng HĐND & UBND</SelectItem>
-                    <SelectItem value="KT">Kinh tế</SelectItem>
-                    <SelectItem value="VHXH">Văn hóa - Xã hội</SelectItem>
-                    <SelectItem value="NNMT">Nông nghiệp & Môi trường</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="space-y-1">
+                  <label
+                    htmlFor="m07-user-email"
+                    className="block text-xs font-semibold text-slate-700"
+                  >
+                    Email công vụ
+                  </label>
+                  <Input
+                    id="m07-user-email"
+                    type="email"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    placeholder="VD: canbo.tp@ubnd.vn"
+                    spellCheck={false}
+                    autoComplete="off"
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label
+                    htmlFor="m07-user-name"
+                    className="block text-xs font-semibold text-slate-700"
+                  >
+                    Họ và tên cán bộ
+                  </label>
+                  <Input
+                    id="m07-user-name"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    placeholder="Họ và tên cán bộ…"
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label
+                    htmlFor="m07-user-position"
+                    className="block text-xs font-semibold text-slate-700"
+                  >
+                    Chức danh / Vị trí
+                  </label>
+                  <Input
+                    id="m07-user-position"
+                    value={newPosition}
+                    onChange={(e) => setNewPosition(e.target.value)}
+                    placeholder="Chức danh / Vị trí…"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Phòng chuyên môn
+                  </label>
+                  <Select
+                    value={newUserDept}
+                    onValueChange={(v) => setNewUserDept(v as DepartmentId)}
+                  >
+                    <SelectTrigger
+                      aria-label="Phòng chuyên môn"
+                      className="w-full min-w-0"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="VP">Văn phòng HĐND & UBND</SelectItem>
+                      <SelectItem value="KT">Kinh tế</SelectItem>
+                      <SelectItem value="VHXH">Văn hóa - Xã hội</SelectItem>
+                      <SelectItem value="NNMT">Nông nghiệp & Môi trường</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="flex items-center justify-between rounded-lg border border-slate-200 p-2.5 text-xs gap-2">
-                  <span>Quyền khai thác Kho dữ liệu riêng</span>
+                  <span id="m07-private-repo-label">
+                    Quyền khai thác Kho dữ liệu riêng
+                  </span>
                   <Switch
+                    aria-labelledby="m07-private-repo-label"
                     checked={newPrivateAccess}
                     onCheckedChange={setNewPrivateAccess}
                   />
@@ -576,18 +631,18 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
                 <Button
                   type="submit"
                   disabled={busy}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white gap-1.5"
+                  className="w-full bg-[#1B4D89] hover:bg-[#163E70] text-white gap-1.5"
                 >
-                  <Plus className="h-4 w-4" />
+                  <Plus aria-hidden="true" className="h-4 w-4" />
                   Thêm tài khoản cán bộ
                 </Button>
               </form>
             </CardContent>
           </Card>
 
-          <Card className="lg:col-span-8 border-slate-200 shadow-xs">
+          <Card className="lg:col-span-8 border-slate-200 shadow-2xs">
             <CardHeader>
-              <CardTitle className="text-base">
+              <CardTitle className="text-base tabular-nums">
                 Danh sách tài khoản & Phạm vi phân quyền ({loaderData.users.length})
               </CardTitle>
             </CardHeader>
@@ -608,7 +663,7 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
                       <TableRow key={u.id}>
                         <TableCell className="text-xs whitespace-normal min-w-[200px]">
                           <p className="font-semibold text-slate-900">{u.email}</p>
-                          <p className="text-slate-500">
+                          <p className="text-slate-600">
                             {u.full_name} · {u.position}
                           </p>
                         </TableCell>
@@ -643,7 +698,7 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
                           <Badge
                             className={
                               u.role === "owner"
-                                ? "bg-blue-600 text-white text-[10px]"
+                                ? "bg-[#0C1E35] text-white text-[10px]"
                                 : "bg-slate-200 text-slate-800 text-[10px]"
                             }
                           >
@@ -662,7 +717,7 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
                               onClick={() => void handleDeleteUser(u.id)}
                               className="h-7 px-2 text-rose-600 hover:text-rose-700"
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
+                              <Trash2 aria-hidden="true" className="h-3.5 w-3.5" />
                             </Button>
                           )}
                         </TableCell>
@@ -677,10 +732,10 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
 
         {/* Tab 2: Instruction của phòng */}
         <TabsContent value="instruction" className="pt-3">
-          <Card className="border-slate-200 shadow-xs max-w-3xl">
+          <Card className="border-slate-200 shadow-2xs max-w-3xl">
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-1.5">
-                <SlidersHorizontal className="h-4 w-4 text-blue-600" />
+                <SlidersHorizontal aria-hidden="true" className="h-4 w-4 text-[#1B4D89]" />
                 Cấu hình Instruction chuyên biệt cho từng phòng
               </CardTitle>
               <CardDescription className="text-xs">
@@ -691,34 +746,51 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSaveInstruction} className="space-y-4">
-                <Select
-                  value={instDeptId}
-                  onValueChange={(v) => setInstDeptId(v as DepartmentId)}
-                >
-                  <SelectTrigger className="w-full min-w-0">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {loaderData.departments.map((d) => (
-                      <SelectItem key={d.id} value={d.id}>
-                        {d.name} ({d.code})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Chọn phòng chuyên môn
+                  </label>
+                  <Select
+                    value={instDeptId}
+                    onValueChange={(v) => setInstDeptId(v as DepartmentId)}
+                  >
+                    <SelectTrigger
+                      aria-label="Chọn phòng chuyên môn"
+                      className="w-full min-w-0"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {loaderData.departments.map((d) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {d.name} ({d.code})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-                <Textarea
-                  rows={6}
-                  value={instText}
-                  onChange={(e) => setInstText(e.target.value)}
-                />
+                <div className="space-y-1">
+                  <label
+                    htmlFor="m07-instruction-text"
+                    className="block text-xs font-semibold text-slate-700"
+                  >
+                    Nội dung Instruction hệ thống của phòng {instDeptId}
+                  </label>
+                  <Textarea
+                    id="m07-instruction-text"
+                    rows={6}
+                    value={instText}
+                    onChange={(e) => setInstText(e.target.value)}
+                  />
+                </div>
 
                 <Button
                   type="submit"
                   disabled={busy}
-                  className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5"
+                  className="bg-[#1B4D89] hover:bg-[#163E70] text-white gap-1.5"
                 >
-                  <Save className="h-4 w-4" />
+                  <Save aria-hidden="true" className="h-4 w-4" />
                   Lưu Instruction của phòng {instDeptId}
                 </Button>
               </form>
@@ -728,10 +800,10 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
 
         {/* Tab 3: Cổng API đấu nối */}
         <TabsContent value="api" className="pt-3">
-          <Card className="border-slate-200 shadow-xs max-w-2xl">
+          <Card className="border-slate-200 shadow-2xs max-w-2xl">
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-1.5">
-                <KeyRound className="h-4 w-4 text-blue-600" />
+                <KeyRound aria-hidden="true" className="h-4 w-4 text-[#1B4D89]" />
                 Cổng API đấu nối mô hình ngôn ngữ (LLM Gateway)
               </CardTitle>
               <CardDescription className="text-xs">
@@ -742,36 +814,55 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
             <CardContent>
               <form onSubmit={handleSaveConnector} className="space-y-3.5">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-700">
+                  <label
+                    htmlFor="m07-conn-name"
+                    className="block text-xs font-semibold text-slate-700"
+                  >
                     Tên cổng kết nối
                   </label>
                   <Input
+                    id="m07-conn-name"
                     value={connName}
                     onChange={(e) => setConnName(e.target.value)}
                   />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1 min-w-0">
-                    <label className="text-xs font-semibold text-slate-700">
+                    <label
+                      htmlFor="m07-conn-url"
+                      className="block text-xs font-semibold text-slate-700"
+                    >
                       Base URL (OpenAI-compatible)
                     </label>
                     <Input
+                      id="m07-conn-url"
                       value={connUrl}
                       onChange={(e) => setConnUrl(e.target.value)}
+                      spellCheck={false}
+                      autoComplete="off"
                     />
                   </div>
                   <div className="space-y-1 min-w-0">
-                    <label className="text-xs font-semibold text-slate-700">
+                    <label
+                      htmlFor="m07-conn-model"
+                      className="block text-xs font-semibold text-slate-700"
+                    >
                       Model Name
                     </label>
                     <Input
+                      id="m07-conn-model"
                       value={connModel}
                       onChange={(e) => setConnModel(e.target.value)}
+                      spellCheck={false}
+                      autoComplete="off"
                     />
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-700 flex items-center justify-between flex-wrap gap-1">
+                  <label
+                    htmlFor="m07-conn-key"
+                    className="text-xs font-semibold text-slate-700 flex items-center justify-between flex-wrap gap-1"
+                  >
                     <span>API Secret Key (chỉ nhập khi muốn thay đổi)</span>
                     <Badge variant="outline" className="font-mono text-[11px]">
                       Hiện tại:{" "}
@@ -779,29 +870,36 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
                     </Badge>
                   </label>
                   <Input
+                    id="m07-conn-key"
                     type="password"
                     value={connKey}
                     onChange={(e) => setConnKey(e.target.value)}
-                    placeholder="sk-..."
+                    placeholder="sk-…"
+                    spellCheck={false}
+                    autoComplete="off"
                   />
                 </div>
                 <div className="flex items-center justify-between rounded-lg border border-slate-200 p-3 text-xs gap-3">
-                  <div>
+                  <div id="m07-conn-active-label">
                     <p className="font-semibold text-slate-900">
                       Kích hoạt gọi LLM trực tiếp
                     </p>
-                    <p className="text-slate-500">
+                    <p className="text-slate-600">
                       Khi tắt, hệ thống sử dụng bộ tổng hợp hành chính chuẩn nội bộ.
                     </p>
                   </div>
-                  <Switch checked={connActive} onCheckedChange={setConnActive} />
+                  <Switch
+                    aria-labelledby="m07-conn-active-label"
+                    checked={connActive}
+                    onCheckedChange={setConnActive}
+                  />
                 </div>
                 <Button
                   type="submit"
                   disabled={busy}
-                  className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5"
+                  className="bg-[#1B4D89] hover:bg-[#163E70] text-white gap-1.5"
                 >
-                  <Save className="h-4 w-4" />
+                  <Save aria-hidden="true" className="h-4 w-4" />
                   Lưu cấu hình Cổng API
                 </Button>
               </form>
@@ -811,11 +909,11 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
 
         {/* Tab 4: Nhật ký hệ thống */}
         <TabsContent value="nhat-ky" className="pt-3">
-          <Card className="border-slate-200 shadow-xs">
+          <Card className="border-slate-200 shadow-2xs">
             <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
               <div>
-                <CardTitle className="text-base flex items-center gap-1.5">
-                  <History className="h-4 w-4 text-blue-600" />
+                <CardTitle className="text-base flex items-center gap-1.5 tabular-nums">
+                  <History aria-hidden="true" className="h-4 w-4 text-[#1B4D89]" />
                   Nhật ký hoạt động hệ thống ({loaderData.logs.length} bản ghi gần nhất)
                 </CardTitle>
                 <CardDescription className="text-xs">
@@ -830,7 +928,7 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
                 onClick={() => revalidator.revalidate()}
                 className="gap-1.5 text-xs whitespace-nowrap"
               >
-                <RefreshCw className="h-3.5 w-3.5" />
+                <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />
                 Làm mới
               </Button>
             </CardHeader>
@@ -849,7 +947,7 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
                   <TableBody>
                     {loaderData.logs.map((log) => (
                       <TableRow key={log.id} className="text-xs">
-                        <TableCell className="text-slate-500 font-mono text-[11px] whitespace-nowrap align-top">
+                        <TableCell className="text-slate-600 font-mono text-[11px] whitespace-nowrap align-top tabular-nums">
                           {log.created_at.slice(0, 19).replace("T", " ")}
                         </TableCell>
                         <TableCell className="font-medium whitespace-nowrap align-top">
@@ -860,7 +958,7 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
                             {log.module_code} · {log.department_id}
                           </Badge>
                         </TableCell>
-                        <TableCell className="font-mono text-[11px] text-blue-700 whitespace-nowrap align-top">
+                        <TableCell className="font-mono text-[11px] text-[#1B4D89] whitespace-nowrap align-top">
                           {log.action}
                         </TableCell>
                         <TableCell className="text-slate-700 whitespace-normal min-w-[220px] align-top">
@@ -880,10 +978,10 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
           value="nhan-ban"
           className="grid grid-cols-1 lg:grid-cols-12 gap-4 pt-3"
         >
-          <Card className="lg:col-span-5 border-slate-200 shadow-xs h-fit">
+          <Card className="lg:col-span-5 border-slate-200 shadow-2xs h-fit">
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-1.5">
-                <Copy className="h-4 w-4 text-blue-600" />
+                <Copy aria-hidden="true" className="h-4 w-4 text-[#1B4D89]" />
                 Nhân bản hệ thống AI độc lập
               </CardTitle>
               <CardDescription className="text-xs">
@@ -894,10 +992,14 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
             <CardContent>
               <form onSubmit={handleCloneTenant} className="space-y-3">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-700">
+                  <label
+                    htmlFor="m07-clone-commune"
+                    className="block text-xs font-semibold text-slate-700"
+                  >
                     Tên đơn vị UBND xã / phường mới
                   </label>
                   <Input
+                    id="m07-clone-commune"
                     value={communeName}
                     onChange={(e) => setCommuneName(e.target.value)}
                     placeholder="VD: UBND Phường Bến Nghé"
@@ -905,34 +1007,40 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-700">
+                  <label
+                    htmlFor="m07-clone-admin"
+                    className="block text-xs font-semibold text-slate-700"
+                  >
                     Email Chủ sở hữu đơn vị mới
                   </label>
                   <Input
+                    id="m07-clone-admin"
                     type="email"
                     value={communeAdmin}
                     onChange={(e) => setCommuneAdmin(e.target.value)}
                     placeholder="admin@tenphuong.gov.vn"
+                    spellCheck={false}
+                    autoComplete="off"
                     required
                   />
                 </div>
                 <Button
                   type="submit"
                   disabled={busy}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white gap-1.5"
+                  className="w-full bg-[#1B4D89] hover:bg-[#163E70] text-white gap-1.5"
                 >
-                  <Copy className="h-4 w-4" />
-                  {busy ? "Đang khởi tạo..." : "Nhân bản hệ thống độc lập"}
+                  <Copy aria-hidden="true" className="h-4 w-4" />
+                  {busy ? "Đang khởi tạo…" : "Nhân bản hệ thống độc lập"}
                 </Button>
               </form>
             </CardContent>
           </Card>
 
-          <Card className="lg:col-span-7 border-slate-200 shadow-xs">
+          <Card className="lg:col-span-7 border-slate-200 shadow-2xs">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div>
-                  <CardTitle className="text-base">
+                  <CardTitle className="text-base tabular-nums">
                     Các đơn vị xã, phường đã nhân bản ({loaderData.tenants.length})
                   </CardTitle>
                   <CardDescription className="text-xs mt-0.5">
@@ -944,9 +1052,9 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
                 {activeTenantSlug === "default" ? (
                   <Badge
                     variant="outline"
-                    className="border-blue-200 bg-blue-50 text-blue-700 text-[11px] whitespace-nowrap"
+                    className="border-[#1B4D89]/30 bg-[#EEF4FB] text-[#1B4D89] text-[11px] whitespace-nowrap"
                   >
-                    <Building2 className="h-3 w-3 mr-1" />
+                    <Building2 aria-hidden="true" className="h-3 w-3 mr-1" />
                     Đang ở đơn vị gốc (default)
                   </Badge>
                 ) : (
@@ -957,7 +1065,7 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
                     onClick={handleReturnRootTenant}
                     className="h-7 text-xs gap-1 border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 whitespace-nowrap"
                   >
-                    <RotateCcw className="h-3 w-3" />
+                    <RotateCcw aria-hidden="true" className="h-3 w-3" />
                     Quay về đơn vị gốc
                   </Button>
                 )}
@@ -1008,7 +1116,10 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
                               Chủ sở hữu: <strong>{t.admin_email}</strong>
                             </p>
                             <p className="font-mono text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
-                              <Database className="h-3 w-3 text-blue-600 shrink-0" />
+                              <Database
+                                aria-hidden="true"
+                                className="h-3 w-3 text-[#1B4D89] shrink-0"
+                              />
                               Kho lưu trữ cô lập: {t.storage_label || `tenants/${t.slug}.db`}
                             </p>
                           </div>
@@ -1022,7 +1133,7 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
                                 onClick={handleReturnRootTenant}
                                 className="h-7 px-2.5 text-xs gap-1 border-amber-300 bg-white text-amber-900 hover:bg-amber-50 whitespace-nowrap"
                               >
-                                <RotateCcw className="h-3 w-3" />
+                                <RotateCcw aria-hidden="true" className="h-3 w-3" />
                                 Quay về đơn vị gốc
                               </Button>
                             ) : (
@@ -1030,9 +1141,9 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
                                 type="button"
                                 size="sm"
                                 onClick={() => handleActivateTenant(t)}
-                                className="h-7 px-2.5 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white whitespace-nowrap"
+                                className="h-7 px-2.5 text-xs gap-1.5 bg-[#1B4D89] hover:bg-[#163E70] text-white whitespace-nowrap"
                               >
-                                <ArrowRightLeft className="h-3 w-3" />
+                                <ArrowRightLeft aria-hidden="true" className="h-3 w-3" />
                                 Chuyển sang vận hành đơn vị này
                               </Button>
                             )}

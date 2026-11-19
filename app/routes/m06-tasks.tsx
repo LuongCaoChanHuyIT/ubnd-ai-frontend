@@ -8,11 +8,8 @@ import {
   AlertTriangle,
   BellRing,
   CheckCircle2,
-  ClipboardList,
-  Clock,
   Lock,
   Plus,
-  TrendingUp,
 } from "lucide-react";
 import type { Route } from "./+types/m06-tasks";
 import {
@@ -30,15 +27,14 @@ import {
   formatTaskStatusLabel,
   resolveDefaultM06FilterDept,
 } from "~/lib/m06-m07-helpers";
+import {
+  MetricStrip,
+  ModuleHeader,
+} from "~/components/workspace/module-surface";
 import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "~/components/ui/card";
+import { Card, CardContent } from "~/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -236,237 +232,248 @@ export default function Module06TasksRoute({ loaderData }: Route.ComponentProps)
 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-wider text-blue-600">
-            MÔ-ĐUN 06 · ĐIỀU HÀNH & THEO DÕI NHIỆM VỤ (
-            {activeFilter === "ALL" ? "TOÀN UBND" : `PHÒNG ${activeFilter}`})
-          </p>
-          <h2 className="text-xl font-bold text-slate-900">
+      <ModuleHeader.Root>
+        <ModuleHeader.Content>
+          <ModuleHeader.Eyebrow>
+            Mô-đun 06 · Điều hành & Theo dõi nhiệm vụ ·{" "}
+            {activeFilter === "ALL" ? "Toàn UBND" : `Phòng ${activeFilter}`}
+          </ModuleHeader.Eyebrow>
+          <ModuleHeader.Title>
             Giao việc, nhắc việc và tổng hợp tiến độ các bộ phận chuyên môn
-          </h2>
-        </div>
+          </ModuleHeader.Title>
+          <ModuleHeader.Description>
+            Theo dõi sát tiến độ xử lý công việc, đôn đốc nhiệm vụ sắp đến hạn và
+            tiếp nhận bàn giao trực tiếp từ các phân hệ tham mưu, soạn thảo.
+          </ModuleHeader.Description>
+        </ModuleHeader.Content>
 
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5">
-              <Plus className="h-4 w-4" />
-              Giao nhiệm vụ mới
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-xl">
-            <DialogHeader>
-              <DialogTitle>Giao nhiệm vụ mới cho bộ phận chuyên môn</DialogTitle>
-              <DialogDescription>
-                Phân công rõ đầu mối cán bộ, thời hạn hoàn thành và số hiệu văn bản
-                hoặc hồ sơ căn cứ.
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleCreateTask} className="space-y-3.5">
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-slate-700">
-                  Tên nhiệm vụ cần thực hiện
-                </label>
-                <Input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Nhập tiêu đề nhiệm vụ cụ thể..."
-                  required
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-slate-700">
-                  Yêu cầu chi tiết & Sản phẩm đầu ra
-                </label>
-                <Textarea
-                  rows={3}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Mô tả rõ kết quả cần trình hoặc hồ sơ cần xác minh..."
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div className="space-y-1.5 min-w-0">
-                  <label className="block text-xs font-semibold text-slate-700">
-                    Bộ phận chủ trì
-                  </label>
-                  <Select
-                    value={isOwner ? taskDept : deptId}
-                    onValueChange={(v) => setTaskDept(v as DepartmentId)}
-                    disabled={!isOwner}
+        <ModuleHeader.Actions>
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-[#1B4D89] hover:bg-[#163E70] text-white gap-1.5">
+                <Plus aria-hidden="true" className="h-4 w-4" />
+                Giao nhiệm vụ mới
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-xl">
+              <DialogHeader>
+                <DialogTitle>Giao nhiệm vụ mới cho bộ phận chuyên môn</DialogTitle>
+                <DialogDescription>
+                  Phân công rõ đầu mối cán bộ, thời hạn hoàn thành và số hiệu văn bản
+                  hoặc hồ sơ căn cứ.
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleCreateTask} className="space-y-3.5">
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="m06-task-title"
+                    className="block text-xs font-semibold text-slate-700"
                   >
-                    <SelectTrigger className="w-full min-w-0">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="VP">Văn phòng HĐND & UBND (VP)</SelectItem>
-                      <SelectItem value="KT">Kinh tế (KT)</SelectItem>
-                      <SelectItem value="VHXH">Văn hóa - Xã hội (VHXH)</SelectItem>
-                      <SelectItem value="NNMT">Nông nghiệp & Môi trường (NNMT)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1.5 min-w-0">
-                  <label className="block text-xs font-semibold text-slate-700">
-                    Mức độ ưu tiên
-                  </label>
-                  <Select
-                    value={priority}
-                    onValueChange={(v) => setPriority(v as TaskItem["priority"])}
-                  >
-                    <SelectTrigger className="w-full min-w-0">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="thap">Thấp</SelectItem>
-                      <SelectItem value="trung_binh">Trung bình</SelectItem>
-                      <SelectItem value="cao">Cao</SelectItem>
-                      <SelectItem value="khan">Khẩn</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div className="space-y-1.5 min-w-0">
-                  <label className="block text-xs font-semibold text-slate-700">
-                    Cán bộ phụ trách thực hiện
+                    Tên nhiệm vụ cần thực hiện
                   </label>
                   <Input
-                    value={assignee}
-                    onChange={(e) => setAssignee(e.target.value)}
-                    placeholder="Họ và tên cán bộ..."
+                    id="m06-task-title"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Nhập tiêu đề nhiệm vụ cụ thể…"
                     required
                   />
                 </div>
 
-                <div className="space-y-1.5 min-w-0">
-                  <label className="block text-xs font-semibold text-slate-700">
-                    Hạn hoàn thành
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="m06-task-desc"
+                    className="block text-xs font-semibold text-slate-700"
+                  >
+                    Yêu cầu chi tiết & Sản phẩm đầu ra
                   </label>
-                  <Input
-                    type="date"
-                    value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                    required
+                  <Textarea
+                    id="m06-task-desc"
+                    rows={3}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Mô tả rõ kết quả cần trình hoặc hồ sơ cần xác minh…"
                   />
                 </div>
-              </div>
 
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-slate-700">
-                  Số hiệu văn bản / Nguồn căn cứ giao việc
-                </label>
-                <Input
-                  value={refDoc}
-                  onChange={(e) => setRefDoc(e.target.value)}
-                  placeholder="VD: 399/2026/NĐ-CP hoặc Dự thảo Kế hoạch..."
-                />
-              </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="space-y-1.5 min-w-0">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Bộ phận chủ trì
+                    </label>
+                    <Select
+                      value={isOwner ? taskDept : deptId}
+                      onValueChange={(v) => setTaskDept(v as DepartmentId)}
+                      disabled={!isOwner}
+                    >
+                      <SelectTrigger
+                        aria-label="Bộ phận chủ trì"
+                        className="w-full min-w-0"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="VP">Văn phòng HĐND & UBND (VP)</SelectItem>
+                        <SelectItem value="KT">Kinh tế (KT)</SelectItem>
+                        <SelectItem value="VHXH">Văn hóa - Xã hội (VHXH)</SelectItem>
+                        <SelectItem value="NNMT">Nông nghiệp & Môi trường (NNMT)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-              <DialogFooter className="pt-1">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setCreateOpen(false)}
-                >
-                  Hủy
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={busy}
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  {busy ? "Đang lưu..." : "Xác nhận giao việc"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
+                  <div className="space-y-1.5 min-w-0">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Mức độ ưu tiên
+                    </label>
+                    <Select
+                      value={priority}
+                      onValueChange={(v) => setPriority(v as TaskItem["priority"])}
+                    >
+                      <SelectTrigger
+                        aria-label="Mức độ ưu tiên"
+                        className="w-full min-w-0"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="thap">Thấp</SelectItem>
+                        <SelectItem value="trung_binh">Trung bình</SelectItem>
+                        <SelectItem value="cao">Cao</SelectItem>
+                        <SelectItem value="khan">Khẩn</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
 
-      {/* 4 KPI Summary Cards matching 100% the currently displayed dataset */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <Card className="border-slate-200 shadow-xs">
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-xs font-semibold text-slate-500">
-              Tổng nhiệm vụ hiển thị
-            </CardTitle>
-            <ClipboardList className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-extrabold text-slate-900">{kpis.total}</p>
-          </CardContent>
-        </Card>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="space-y-1.5 min-w-0">
+                    <label
+                      htmlFor="m06-task-assignee"
+                      className="block text-xs font-semibold text-slate-700"
+                    >
+                      Cán bộ phụ trách thực hiện
+                    </label>
+                    <Input
+                      id="m06-task-assignee"
+                      value={assignee}
+                      onChange={(e) => setAssignee(e.target.value)}
+                      placeholder="Họ và tên cán bộ…"
+                      required
+                    />
+                  </div>
 
-        <Card className="border-slate-200 shadow-xs">
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-xs font-semibold text-slate-500">
-              Đang thực hiện
-            </CardTitle>
-            <TrendingUp className="h-4 w-4 text-indigo-600" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-extrabold text-indigo-700">
-              {kpis.in_progress}
-            </p>
-          </CardContent>
-        </Card>
+                  <div className="space-y-1.5 min-w-0">
+                    <label
+                      htmlFor="m06-task-due"
+                      className="block text-xs font-semibold text-slate-700"
+                    >
+                      Hạn hoàn thành
+                    </label>
+                    <Input
+                      id="m06-task-due"
+                      type="date"
+                      value={dueDate}
+                      onChange={(e) => setDueDate(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
 
-        <Card className="border-slate-200 shadow-xs">
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-xs font-semibold text-slate-500">
-              Sắp đến hạn / Cần đôn đốc
-            </CardTitle>
-            <Clock className="h-4 w-4 text-amber-600" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-extrabold text-amber-600">
-              {kpis.due_soon}
-            </p>
-          </CardContent>
-        </Card>
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="m06-task-ref"
+                    className="block text-xs font-semibold text-slate-700"
+                  >
+                    Số hiệu văn bản / Nguồn căn cứ giao việc
+                  </label>
+                  <Input
+                    id="m06-task-ref"
+                    value={refDoc}
+                    onChange={(e) => setRefDoc(e.target.value)}
+                    placeholder="VD: 399/2026/NĐ-CP hoặc Dự thảo Kế hoạch…"
+                  />
+                </div>
 
-        <Card className="border-slate-200 shadow-xs">
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-xs font-semibold text-slate-500">
-              Đã hoàn thành
-            </CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-extrabold text-emerald-700">
-              {kpis.completed}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+                <DialogFooter className="pt-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setCreateOpen(false)}
+                  >
+                    Hủy
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={busy}
+                    className="bg-[#1B4D89] hover:bg-[#163E70] text-white"
+                  >
+                    {busy ? "Đang lưu…" : "Xác nhận giao việc"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </ModuleHeader.Actions>
+      </ModuleHeader.Root>
+
+      {/* 4 KPI Summary Strip matching 100% the currently displayed dataset */}
+      <MetricStrip.Root>
+        <MetricStrip.Item
+          label="Tổng nhiệm vụ hiển thị"
+          value={kpis.total}
+          hint={activeFilter === "ALL" ? "Toàn bộ 4 phòng chuyên môn" : `Phạm vi phòng ${activeFilter}`}
+          tone="cobalt"
+        />
+        <MetricStrip.Item
+          label="Đang thực hiện"
+          value={kpis.in_progress}
+          hint="Nhiệm vụ đang triển khai"
+          tone="neutral"
+        />
+        <MetricStrip.Item
+          label="Sắp đến hạn / Cần đôn đốc"
+          value={kpis.due_soon}
+          hint="Ưu tiên nhắc tiến độ"
+          tone="amber"
+        />
+        <MetricStrip.Item
+          label="Đã hoàn thành"
+          value={kpis.completed}
+          hint="Đạt 100% khối lượng"
+          tone="emerald"
+        />
+      </MetricStrip.Root>
 
       {feedback && (
-        <Alert
-          variant={feedback.tone === "err" ? "destructive" : "default"}
-          className={cn(
-            "py-2.5",
-            feedback.tone === "ok" &&
-              "border-emerald-200 bg-emerald-50 text-emerald-900",
-          )}
+        <div
+          role={feedback.tone === "err" ? "alert" : "status"}
+          aria-live="polite"
         >
-          <AlertDescription className="text-xs flex items-center gap-1.5">
-            {feedback.tone === "ok" ? (
-              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-            ) : (
-              <AlertTriangle className="h-4 w-4 shrink-0" />
+          <Alert
+            variant={feedback.tone === "err" ? "destructive" : "default"}
+            className={cn(
+              "py-2.5",
+              feedback.tone === "ok" &&
+                "border-emerald-200 bg-emerald-50 text-emerald-900",
             )}
-            {feedback.text}
-          </AlertDescription>
-        </Alert>
+          >
+            <AlertDescription className="text-xs flex items-center gap-1.5">
+              {feedback.tone === "ok" ? (
+                <CheckCircle2
+                  aria-hidden="true"
+                  className="h-4 w-4 text-emerald-600 shrink-0"
+                />
+              ) : (
+                <AlertTriangle aria-hidden="true" className="h-4 w-4 shrink-0" />
+              )}
+              {feedback.text}
+            </AlertDescription>
+          </Alert>
+        </div>
       )}
 
       {/* Filter Pills + Tasks Table */}
-      <Card className="border-slate-200 shadow-xs">
+      <Card className="border-slate-200 shadow-2xs">
         <CardContent className="pt-5 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             {isOwner ? (
@@ -476,7 +483,11 @@ export default function Module06TasksRoute({ loaderData }: Route.ComponentProps)
                   size="sm"
                   variant={activeFilter === deptId ? "default" : "outline"}
                   onClick={() => setDeptFilter(deptId)}
-                  className="text-xs h-8 whitespace-nowrap"
+                  className={cn(
+                    "text-xs h-8 whitespace-nowrap",
+                    activeFilter === deptId &&
+                      "bg-[#1B4D89] hover:bg-[#163E70] text-white",
+                  )}
                 >
                   Phòng hiện tại ({deptId})
                 </Button>
@@ -485,7 +496,11 @@ export default function Module06TasksRoute({ loaderData }: Route.ComponentProps)
                   size="sm"
                   variant={activeFilter === "ALL" ? "default" : "outline"}
                   onClick={() => setDeptFilter("ALL")}
-                  className="text-xs h-8 whitespace-nowrap"
+                  className={cn(
+                    "text-xs h-8 whitespace-nowrap",
+                    activeFilter === "ALL" &&
+                      "bg-[#1B4D89] hover:bg-[#163E70] text-white",
+                  )}
                 >
                   Tất cả 4 bộ phận
                 </Button>
@@ -505,7 +520,11 @@ export default function Module06TasksRoute({ loaderData }: Route.ComponentProps)
                       size="sm"
                       variant={activeFilter === item.id ? "default" : "outline"}
                       onClick={() => setDeptFilter(item.id)}
-                      className="text-xs h-8 whitespace-nowrap"
+                      className={cn(
+                        "text-xs h-8 whitespace-nowrap",
+                        activeFilter === item.id &&
+                          "bg-[#1B4D89] hover:bg-[#163E70] text-white",
+                      )}
                     >
                       Phòng {item.label}
                     </Button>
@@ -513,12 +532,12 @@ export default function Module06TasksRoute({ loaderData }: Route.ComponentProps)
               </div>
             ) : (
               <div className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-900">
-                <Lock className="h-3.5 w-3.5 text-amber-700 shrink-0" />
+                <Lock aria-hidden="true" className="h-3.5 w-3.5 text-amber-700 shrink-0" />
                 Phòng {deptId} · Đã khóa theo phân quyền phòng
               </div>
             )}
 
-            <span className="text-xs text-slate-500">
+            <span className="text-xs text-slate-600 tabular-nums">
               Hiển thị <strong>{tasks.length}</strong> nhiệm vụ
             </span>
           </div>
@@ -560,12 +579,12 @@ export default function Module06TasksRoute({ loaderData }: Route.ComponentProps)
                           </Badge>
                         </div>
                         {t.description && (
-                          <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">
+                          <p className="text-xs text-slate-600 mt-0.5 line-clamp-2">
                             {t.description}
                           </p>
                         )}
                         {t.ref_doc_number && (
-                          <p className="text-[11px] text-blue-600 mt-0.5">
+                          <p className="text-[11px] text-[#1B4D89] mt-0.5">
                             Căn cứ: {t.ref_doc_number}
                           </p>
                         )}
@@ -577,7 +596,7 @@ export default function Module06TasksRoute({ loaderData }: Route.ComponentProps)
                       </TableCell>
                       <TableCell className="text-xs whitespace-nowrap align-top">
                         <p className="font-medium text-slate-900">{t.assignee}</p>
-                        <p className="text-[11px] text-slate-500">
+                        <p className="text-[11px] text-slate-500 tabular-nums">
                           Hạn: {t.due_date}
                         </p>
                       </TableCell>
@@ -587,7 +606,7 @@ export default function Module06TasksRoute({ loaderData }: Route.ComponentProps)
                             <span className="font-medium text-slate-700">
                               {formatTaskStatusLabel(t.status)}
                             </span>
-                            <span className="font-bold text-blue-700">
+                            <span className="font-bold text-[#1B4D89] tabular-nums">
                               {t.progress}%
                             </span>
                           </div>
@@ -607,7 +626,7 @@ export default function Module06TasksRoute({ loaderData }: Route.ComponentProps)
                                   progress: Math.min(100, t.progress + 25),
                                 })
                               }
-                              className="h-7 px-2 text-[11px] whitespace-nowrap"
+                              className="h-7 px-2 text-[11px] whitespace-nowrap tabular-nums"
                             >
                               +25%
                             </Button>
@@ -618,9 +637,9 @@ export default function Module06TasksRoute({ loaderData }: Route.ComponentProps)
                             size="sm"
                             disabled={busy}
                             onClick={() => void handlePatchTask(t, { remind: true })}
-                            className="h-7 px-2 text-[11px] gap-1 text-amber-700 border-amber-200 hover:bg-amber-50 whitespace-nowrap"
+                            className="h-7 px-2 text-[11px] gap-1 text-amber-800 border-amber-300 hover:bg-amber-50 whitespace-nowrap tabular-nums"
                           >
-                            <BellRing className="h-3 w-3" />
+                            <BellRing aria-hidden="true" className="h-3 w-3" />
                             Nhắc ({t.reminder_count})
                           </Button>
                         </div>

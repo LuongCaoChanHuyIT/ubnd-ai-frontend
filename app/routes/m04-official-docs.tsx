@@ -32,6 +32,7 @@ import {
 } from "~/lib/api";
 import { formatTierLabel } from "~/lib/m03-m05-helpers";
 import { normalizeM04Tab } from "~/lib/m06-m07-helpers";
+import { ModuleHeader } from "~/components/workspace/module-surface";
 import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -115,10 +116,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       tier,
       documents: [] as OfficialDoc[],
       updateRequests: [] as DocUpdateRequest[],
-      loaderError:
-        err instanceof ApiError
-          ? err.message
-          : null,
+      loaderError: err instanceof ApiError ? err.message : null,
     };
   }
 }
@@ -344,144 +342,201 @@ export default function Module04OfficialDocsRoute({
     );
   }
 
+  function renderTierBadge(tier: DocTier) {
+    if (tier === "kho_rieng") {
+      return (
+        <Badge
+          variant="outline"
+          className="border-amber-300 bg-amber-50 text-amber-800 text-[11px]"
+        >
+          {formatTierLabel(tier)}
+        </Badge>
+      );
+    }
+    if (tier === "dia_phuong") {
+      return (
+        <Badge
+          variant="outline"
+          className="border-emerald-300 bg-emerald-50 text-emerald-800 text-[11px]"
+        >
+          {formatTierLabel(tier)}
+        </Badge>
+      );
+    }
+    return (
+      <Badge
+        variant="outline"
+        className="border-[#1B4D89]/30 bg-[#EEF4FB] text-[#1B4D89] text-[11px]"
+      >
+        {formatTierLabel(tier)}
+      </Badge>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-6xl space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-wider text-blue-600">
-            MÔ-ĐUN 04 · KHO PHÁP LÝ & DỮ LIỆU ĐƠN VỊ ({deptId})
-          </p>
-          <h2 className="text-xl font-bold text-slate-900">
+      <ModuleHeader.Root>
+        <ModuleHeader.Content>
+          <ModuleHeader.Eyebrow>
+            Mô-đun 04 · Kho pháp lý & Dữ liệu đơn vị · Phòng {deptId}
+          </ModuleHeader.Eyebrow>
+          <ModuleHeader.Title>
             Nguồn văn bản chính thức & Kho dữ liệu riêng theo phân quyền
-          </h2>
-        </div>
+          </ModuleHeader.Title>
+          <ModuleHeader.Description>
+            Tra cứu văn bản Trung ương, Địa phương và Kho dữ liệu riêng của phòng;
+            tiếp nhận và phê duyệt đề nghị cập nhật văn bản mới.
+          </ModuleHeader.Description>
+        </ModuleHeader.Content>
 
         {hasPrivateRepoAccess && (
-          <Dialog open={addOpen} onOpenChange={setAddOpen}>
-            <DialogTrigger asChild>
-              <Button
-                size="sm"
-                className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5"
-              >
-                <Plus className="h-4 w-4" />
-                {isOwner
-                  ? "Bổ sung văn bản vào kho"
-                  : `Bổ sung vào Kho riêng (${deptId})`}
-              </Button>
-            </DialogTrigger>
-          <DialogContent className="sm:max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Bổ sung văn bản vào kho ({deptId})</DialogTitle>
-              <DialogDescription>
-                {isOwner
-                  ? `Quản trị viên có thể bổ sung trực tiếp văn bản Trung ương, Địa phương hoặc Kho dữ liệu riêng phòng ${deptId}.`
-                  : `Cán bộ chuyên môn bổ sung tài liệu vào Kho dữ liệu riêng của phòng ${deptId}; với văn bản Trung ương/Địa phương vui lòng gửi Đề nghị cập nhật.`}
-              </DialogDescription>
-            </DialogHeader>
+          <ModuleHeader.Actions>
+            <Dialog open={addOpen} onOpenChange={setAddOpen}>
+              <DialogTrigger asChild>
+                <Button
+                  size="sm"
+                  className="bg-[#1B4D89] hover:bg-[#163E70] text-white gap-1.5"
+                >
+                  <Plus aria-hidden="true" className="h-4 w-4" />
+                  {isOwner
+                    ? "Bổ sung văn bản vào kho"
+                    : `Bổ sung vào Kho riêng (${deptId})`}
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>Bổ sung văn bản vào kho ({deptId})</DialogTitle>
+                  <DialogDescription>
+                    {isOwner
+                      ? `Quản trị viên có thể bổ sung trực tiếp văn bản Trung ương, Địa phương hoặc Kho dữ liệu riêng phòng ${deptId}.`
+                      : `Cán bộ chuyên môn bổ sung tài liệu vào Kho dữ liệu riêng của phòng ${deptId}; với văn bản Trung ương/Địa phương vui lòng gửi Đề nghị cập nhật.`}
+                  </DialogDescription>
+                </DialogHeader>
 
-            {!hasPrivateRepoAccess ? (
-              <div className="space-y-3">
-                <Alert variant="destructive">
-                  <Lock className="h-4 w-4" />
-                  <AlertDescription className="text-xs">
-                    Tài khoản hiện tại không được cấp quyền ghi vào Kho dữ liệu
-                    riêng của phòng {deptId}. Vui lòng chuyển sang tab{" "}
-                    <strong>Đề nghị cập nhật văn bản</strong> để gửi yêu cầu tới Quản
-                    trị viên.
-                  </AlertDescription>
-                </Alert>
-                <DialogFooter>
-                  <Button
-                    type="button"
-                    onClick={() => {
-                      setAddOpen(false);
-                      setTabParam("de_nghi");
-                    }}
-                  >
-                    Mở tab Đề nghị cập nhật
-                  </Button>
-                </DialogFooter>
-              </div>
-            ) : (
-              <form onSubmit={handleCreateDoc} className="space-y-3">
-                <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-slate-700">
-                    Số hiệu văn bản
-                  </label>
-                  <Input
-                    value={docNumber}
-                    onChange={(e) => setDocNumber(e.target.value)}
-                    placeholder="VD: QC-05/2026/UBND-VP"
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-slate-700">
-                    Trích yếu văn bản
-                  </label>
-                  <Input
-                    value={docTitle}
-                    onChange={(e) => setDocTitle(e.target.value)}
-                    placeholder="Trích yếu văn bản..."
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-slate-700">
-                    Phân tầng nguồn kho
-                  </label>
-                  <Select
-                    value={isOwner ? docTier : "kho_rieng"}
-                    onValueChange={(v) => setDocTier(v as DocTier)}
-                    disabled={!isOwner}
-                  >
-                    <SelectTrigger className="w-full min-w-0">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="kho_rieng">
-                        Kho dữ liệu riêng phòng {deptId}
-                      </SelectItem>
-                      {isOwner && (
-                        <>
-                          <SelectItem value="dia_phuong">
-                            Văn bản Địa phương (Toàn UBND)
+                {!hasPrivateRepoAccess ? (
+                  <div className="space-y-3">
+                    <Alert variant="destructive">
+                      <Lock aria-hidden="true" className="h-4 w-4" />
+                      <AlertDescription className="text-xs">
+                        Tài khoản hiện tại không được cấp quyền ghi vào Kho dữ liệu
+                        riêng của phòng {deptId}. Vui lòng chuyển sang tab{" "}
+                        <strong>Đề nghị cập nhật văn bản</strong> để gửi yêu cầu tới Quản
+                        trị viên.
+                      </AlertDescription>
+                    </Alert>
+                    <DialogFooter>
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          setAddOpen(false);
+                          setTabParam("de_nghi");
+                        }}
+                      >
+                        Mở tab Đề nghị cập nhật
+                      </Button>
+                    </DialogFooter>
+                  </div>
+                ) : (
+                  <form onSubmit={handleCreateDoc} className="space-y-3">
+                    <div className="space-y-1">
+                      <label
+                        htmlFor="m04-doc-number"
+                        className="block text-xs font-semibold text-slate-700"
+                      >
+                        Số hiệu văn bản
+                      </label>
+                      <Input
+                        id="m04-doc-number"
+                        value={docNumber}
+                        onChange={(e) => setDocNumber(e.target.value)}
+                        placeholder="VD: QC-05/2026/UBND-VP"
+                        spellCheck={false}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label
+                        htmlFor="m04-doc-title"
+                        className="block text-xs font-semibold text-slate-700"
+                      >
+                        Trích yếu văn bản
+                      </label>
+                      <Input
+                        id="m04-doc-title"
+                        value={docTitle}
+                        onChange={(e) => setDocTitle(e.target.value)}
+                        placeholder="Trích yếu văn bản…"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-xs font-semibold text-slate-700">
+                        Phân tầng nguồn kho
+                      </label>
+                      <Select
+                        value={isOwner ? docTier : "kho_rieng"}
+                        onValueChange={(v) => setDocTier(v as DocTier)}
+                        disabled={!isOwner}
+                      >
+                        <SelectTrigger
+                          aria-label="Phân tầng nguồn kho"
+                          className="w-full min-w-0"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="kho_rieng">
+                            Kho dữ liệu riêng phòng {deptId}
                           </SelectItem>
-                          <SelectItem value="trung_uong">
-                            Văn bản Trung ương (Toàn UBND)
-                          </SelectItem>
-                        </>
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-slate-700">
-                    Nội dung trích lục phục vụ tra cứu AI
-                  </label>
-                  <Textarea
-                    rows={4}
-                    value={docContent}
-                    onChange={(e) => setDocContent(e.target.value)}
-                    placeholder="Nội dung điều khoản cốt lõi phục vụ AI tra cứu..."
-                    required
-                  />
-                </div>
-                <DialogFooter>
-                  <Button type="submit" disabled={busyAdd}>
-                    {busyAdd ? "Đang lưu..." : "Lưu văn bản"}
-                  </Button>
-                </DialogFooter>
-              </form>
-            )}
-          </DialogContent>
-        </Dialog>
+                          {isOwner && (
+                            <>
+                              <SelectItem value="dia_phuong">
+                                Văn bản Địa phương (Toàn UBND)
+                              </SelectItem>
+                              <SelectItem value="trung_uong">
+                                Văn bản Trung ương (Toàn UBND)
+                              </SelectItem>
+                            </>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <label
+                        htmlFor="m04-doc-content"
+                        className="block text-xs font-semibold text-slate-700"
+                      >
+                        Nội dung trích lục phục vụ tra cứu AI
+                      </label>
+                      <Textarea
+                        id="m04-doc-content"
+                        rows={4}
+                        value={docContent}
+                        onChange={(e) => setDocContent(e.target.value)}
+                        placeholder="Nội dung điều khoản cốt lõi phục vụ AI tra cứu…"
+                        required
+                      />
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        type="submit"
+                        disabled={busyAdd}
+                        className="bg-[#1B4D89] hover:bg-[#163E70] text-white"
+                      >
+                        {busyAdd ? "Đang lưu…" : "Lưu văn bản"}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                )}
+              </DialogContent>
+            </Dialog>
+          </ModuleHeader.Actions>
         )}
-      </div>
+      </ModuleHeader.Root>
 
       {!hasPrivateRepoAccess && (
         <Alert className="border-amber-300 bg-amber-50 text-amber-950 py-2.5">
-          <Lock className="h-4 w-4 text-amber-700" />
+          <Lock aria-hidden="true" className="h-4 w-4 text-amber-700" />
           <AlertDescription className="text-xs">
             Tài khoản cán bộ hiện tại đang bị giới hạn quyền truy cập{" "}
             <strong>Kho dữ liệu riêng</strong> của phòng {deptId} — danh mục chỉ hiển
@@ -492,7 +547,7 @@ export default function Module04OfficialDocsRoute({
 
       {loaderData.loaderError && (
         <Alert variant="destructive" className="py-2.5">
-          <AlertTriangle className="h-4 w-4" />
+          <AlertTriangle aria-hidden="true" className="h-4 w-4" />
           <AlertDescription className="text-xs">
             {loaderData.loaderError}
           </AlertDescription>
@@ -500,39 +555,53 @@ export default function Module04OfficialDocsRoute({
       )}
 
       {feedback && (
-        <Alert
-          variant={feedback.tone === "err" ? "destructive" : "default"}
-          className={cn(
-            "py-2.5",
-            feedback.tone === "ok" &&
-              "border-emerald-200 bg-emerald-50 text-emerald-900",
-          )}
+        <div
+          role={feedback.tone === "err" ? "alert" : "status"}
+          aria-live="polite"
         >
-          <AlertDescription className="text-xs flex items-center gap-1.5">
-            {feedback.tone === "ok" ? (
-              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-            ) : (
-              <AlertTriangle className="h-4 w-4 shrink-0" />
+          <Alert
+            variant={feedback.tone === "err" ? "destructive" : "default"}
+            className={cn(
+              "py-2.5",
+              feedback.tone === "ok" &&
+                "border-emerald-200 bg-emerald-50 text-emerald-900",
             )}
-            {feedback.text}
-          </AlertDescription>
-        </Alert>
+          >
+            <AlertDescription className="text-xs flex items-center gap-1.5">
+              {feedback.tone === "ok" ? (
+                <CheckCircle2
+                  aria-hidden="true"
+                  className="h-4 w-4 text-emerald-600 shrink-0"
+                />
+              ) : (
+                <AlertTriangle aria-hidden="true" className="h-4 w-4 shrink-0" />
+              )}
+              {feedback.text}
+            </AlertDescription>
+          </Alert>
+        </div>
       )}
 
       <Tabs value={activeTab} onValueChange={setTabParam}>
         <TabsList className="flex flex-wrap h-auto">
-          <TabsTrigger value="danh_muc" className="gap-1.5 text-xs sm:text-sm">
-            <BookOpen className="h-3.5 w-3.5" />
+          <TabsTrigger
+            value="danh_muc"
+            className="gap-1.5 text-xs sm:text-sm tabular-nums"
+          >
+            <BookOpen aria-hidden="true" className="h-3.5 w-3.5" />
             Danh mục văn bản ({loaderData.documents.length})
           </TabsTrigger>
-          <TabsTrigger value="de_nghi" className="gap-1.5 text-xs sm:text-sm">
-            <RefreshCw className="h-3.5 w-3.5" />
+          <TabsTrigger
+            value="de_nghi"
+            className="gap-1.5 text-xs sm:text-sm tabular-nums"
+          >
+            <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />
             Đề nghị cập nhật văn bản ({loaderData.updateRequests.length})
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="danh_muc" className="space-y-4 pt-3">
-          <Card className="border-slate-200 shadow-xs">
+          <Card className="border-slate-200 shadow-2xs">
             <CardContent className="pt-5 space-y-4">
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
                 <Form method="get" className="flex flex-1 gap-2 min-w-0">
@@ -540,10 +609,14 @@ export default function Module04OfficialDocsRoute({
                   {loaderData.tier && (
                     <input type="hidden" name="tier" value={loaderData.tier} />
                   )}
+                  <label htmlFor="m04-search-input" className="sr-only">
+                    Từ khóa tra cứu số hiệu hoặc trích yếu văn bản
+                  </label>
                   <Input
+                    id="m04-search-input"
                     name="q"
                     defaultValue={loaderData.q}
-                    placeholder="Tìm theo số hiệu (VD: 30/2020/NĐ-CP, 399/2026/NĐ-CP) hoặc trích yếu..."
+                    placeholder="Tìm theo số hiệu (VD: 30/2020/NĐ-CP, 399/2026/NĐ-CP) hoặc trích yếu…"
                     className="flex-1 min-w-0"
                   />
                   <Button
@@ -551,7 +624,7 @@ export default function Module04OfficialDocsRoute({
                     variant="secondary"
                     className="gap-1.5 whitespace-nowrap"
                   >
-                    <Search className="h-4 w-4" />
+                    <Search aria-hidden="true" className="h-4 w-4" />
                     Tra cứu
                   </Button>
                 </Form>
@@ -562,20 +635,24 @@ export default function Module04OfficialDocsRoute({
                     { id: "trung_uong", label: "Trung ương" },
                     { id: "dia_phuong", label: "Địa phương" },
                     { id: "kho_rieng", label: `Kho riêng (${deptId})` },
-                  ].map((t) => (
-                    <Button
-                      key={t.id}
-                      type="button"
-                      size="sm"
-                      variant={
-                        (loaderData.tier || "all") === t.id ? "default" : "outline"
-                      }
-                      onClick={() => setTierFilter(t.id)}
-                      className="text-xs h-8 whitespace-nowrap"
-                    >
-                      {t.label}
-                    </Button>
-                  ))}
+                  ].map((t) => {
+                    const active = (loaderData.tier || "all") === t.id;
+                    return (
+                      <Button
+                        key={t.id}
+                        type="button"
+                        size="sm"
+                        variant={active ? "default" : "outline"}
+                        onClick={() => setTierFilter(t.id)}
+                        className={cn(
+                          "text-xs h-8 whitespace-nowrap",
+                          active && "bg-[#1B4D89] hover:bg-[#163E70] text-white",
+                        )}
+                      >
+                        {t.label}
+                      </Button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -603,9 +680,9 @@ export default function Module04OfficialDocsRoute({
                     ) : (
                       loaderData.documents.map((doc) => (
                         <TableRow key={doc.id}>
-                          <TableCell className="font-semibold text-blue-700 text-xs whitespace-nowrap align-top">
+                          <TableCell className="font-semibold text-[#1B4D89] text-xs whitespace-nowrap align-top tabular-nums">
                             {doc.doc_number}
-                            <div className="text-[11px] font-normal text-slate-400">
+                            <div className="text-[11px] font-normal text-slate-500">
                               {doc.issued_date}
                             </div>
                           </TableCell>
@@ -613,25 +690,19 @@ export default function Module04OfficialDocsRoute({
                             <p className="font-semibold text-xs text-slate-900">
                               {doc.title}
                             </p>
-                            <p className="text-xs text-slate-500 line-clamp-2 mt-0.5">
+                            <p className="text-xs text-slate-600 line-clamp-2 mt-0.5">
                               {doc.summary}
                             </p>
                           </TableCell>
                           <TableCell className="whitespace-nowrap align-top">
-                            <Badge
-                              variant="outline"
-                              className={
-                                doc.tier === "kho_rieng"
-                                  ? "border-amber-300 bg-amber-50 text-amber-800 text-[11px]"
-                                  : "border-blue-200 bg-blue-50 text-blue-700 text-[11px]"
-                              }
-                            >
-                              {formatTierLabel(doc.tier)}
-                            </Badge>
+                            {renderTierBadge(doc.tier)}
                           </TableCell>
                           <TableCell className="text-xs whitespace-nowrap align-top">
                             <span className="inline-flex items-center gap-1 font-medium text-slate-700">
-                              <Shield className="h-3 w-3 text-slate-400 shrink-0" />
+                              <Shield
+                                aria-hidden="true"
+                                className="h-3 w-3 text-slate-400 shrink-0"
+                              />
                               {doc.department_id === "ALL"
                                 ? "Toàn UBND"
                                 : `Phòng ${doc.department_id}`}
@@ -642,10 +713,11 @@ export default function Module04OfficialDocsRoute({
                               type="button"
                               variant="ghost"
                               size="sm"
+                              aria-label={`Xem chi tiết văn bản ${doc.doc_number}`}
                               onClick={() => setSelectedDoc(doc)}
-                              className="h-7 px-2 text-xs gap-1 whitespace-nowrap"
+                              className="h-7 px-2 text-xs gap-1 whitespace-nowrap text-[#1B4D89] hover:bg-[#EEF4FB]"
                             >
-                              <Eye className="h-3.5 w-3.5" />
+                              <Eye aria-hidden="true" className="h-3.5 w-3.5" />
                               Xem
                             </Button>
                           </TableCell>
@@ -663,7 +735,7 @@ export default function Module04OfficialDocsRoute({
           value="de_nghi"
           className="grid grid-cols-1 lg:grid-cols-12 gap-4 pt-3"
         >
-          <Card className="lg:col-span-5 border-slate-200 shadow-xs h-fit">
+          <Card className="lg:col-span-5 border-slate-200 shadow-2xs h-fit">
             <CardHeader>
               <CardTitle className="text-base">
                 Gửi đề nghị cập nhật văn bản mới
@@ -676,21 +748,30 @@ export default function Module04OfficialDocsRoute({
             <CardContent>
               <form onSubmit={handleSubmitUpdateRequest} className="space-y-3">
                 <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-slate-700">
+                  <label
+                    htmlFor="m04-req-number"
+                    className="block text-xs font-semibold text-slate-700"
+                  >
                     Số hiệu văn bản đề nghị
                   </label>
                   <Input
+                    id="m04-req-number"
                     value={reqNumber}
                     onChange={(e) => setReqNumber(e.target.value)}
                     placeholder="VD: 12/2026/TT-BNV"
+                    spellCheck={false}
                     required
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-slate-700">
+                  <label
+                    htmlFor="m04-req-title"
+                    className="block text-xs font-semibold text-slate-700"
+                  >
                     Tên / Trích yếu văn bản
                   </label>
                   <Input
+                    id="m04-req-title"
                     value={reqTitle}
                     onChange={(e) => setReqTitle(e.target.value)}
                     placeholder="Tên / Trích yếu văn bản cần cập nhật"
@@ -705,7 +786,10 @@ export default function Module04OfficialDocsRoute({
                     value={reqTier}
                     onValueChange={(v) => setReqTier(v as DocTier)}
                   >
-                    <SelectTrigger className="w-full min-w-0">
+                    <SelectTrigger
+                      aria-label="Phân tầng đề xuất"
+                      className="w-full min-w-0"
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -718,31 +802,35 @@ export default function Module04OfficialDocsRoute({
                   </Select>
                 </div>
                 <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-slate-700">
+                  <label
+                    htmlFor="m04-req-reason"
+                    className="block text-xs font-semibold text-slate-700"
+                  >
                     Lý do cập nhật / Tóm tắt điểm mới
                   </label>
                   <Textarea
+                    id="m04-req-reason"
                     rows={3}
                     value={reqReason}
                     onChange={(e) => setReqReason(e.target.value)}
-                    placeholder="Lý do cập nhật / thay thế điều khoản nào..."
+                    placeholder="Lý do cập nhật / thay thế điều khoản nào…"
                     required
                   />
                 </div>
                 <Button
                   type="submit"
                   disabled={busyReq}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                  className="w-full bg-[#1B4D89] hover:bg-[#163E70] text-white"
                 >
-                  {busyReq ? "Đang gửi..." : "Gửi đề nghị cập nhật"}
+                  {busyReq ? "Đang gửi…" : "Gửi đề nghị cập nhật"}
                 </Button>
               </form>
             </CardContent>
           </Card>
 
-          <Card className="lg:col-span-7 border-slate-200 shadow-xs">
+          <Card className="lg:col-span-7 border-slate-200 shadow-2xs">
             <CardHeader>
-              <CardTitle className="text-base">
+              <CardTitle className="text-base tabular-nums">
                 Danh sách đề nghị cập nhật đã ghi nhận ({loaderData.updateRequests.length})
               </CardTitle>
               <CardDescription className="text-xs">
@@ -767,14 +855,14 @@ export default function Module04OfficialDocsRoute({
                         className="rounded-lg border border-slate-200 p-3.5 text-xs space-y-2"
                       >
                         <div className="flex items-start justify-between gap-2 flex-wrap">
-                          <span className="font-bold text-blue-700">
+                          <span className="font-bold text-[#1B4D89]">
                             {r.doc_number} — {r.title}
                           </span>
                           {renderRequestStatusBadge(r)}
                         </div>
                         <p className="text-slate-600 leading-relaxed">{r.reason}</p>
                         <div className="flex items-center justify-between gap-2 flex-wrap pt-1">
-                          <p className="text-[11px] text-slate-400">
+                          <p className="text-[11px] text-slate-500">
                             Người đề nghị: {r.requested_by} · {formatTierLabel(r.tier)}
                           </p>
 
@@ -787,7 +875,7 @@ export default function Module04OfficialDocsRoute({
                                 onClick={() => void handleReviewRequest(r, "da_duyet")}
                                 className="h-7 px-2.5 text-[11px] gap-1 bg-emerald-600 hover:bg-emerald-700 text-white whitespace-nowrap"
                               >
-                                <CheckCircle2 className="h-3 w-3" />
+                                <CheckCircle2 aria-hidden="true" className="h-3 w-3" />
                                 Phê duyệt & Nhập kho
                               </Button>
                               <Button
@@ -798,7 +886,7 @@ export default function Module04OfficialDocsRoute({
                                 onClick={() => void handleReviewRequest(r, "tu_choi")}
                                 className="h-7 px-2.5 text-[11px] gap-1 border-rose-200 text-rose-700 hover:bg-rose-50 whitespace-nowrap"
                               >
-                                <XCircle className="h-3 w-3" />
+                                <XCircle aria-hidden="true" className="h-3 w-3" />
                                 Từ chối
                               </Button>
                             </div>
@@ -823,10 +911,10 @@ export default function Module04OfficialDocsRoute({
           {selectedDoc && (
             <>
               <DialogHeader>
-                <DialogTitle>
+                <DialogTitle className="text-balance">
                   {selectedDoc.doc_number} · {selectedDoc.title}
                 </DialogTitle>
-                <DialogDescription>
+                <DialogDescription className="tabular-nums">
                   Cơ quan ban hành: {selectedDoc.issuer} · Ngày ban hành:{" "}
                   {selectedDoc.issued_date} · Phạm vi: {selectedDoc.department_id}
                 </DialogDescription>
@@ -836,11 +924,13 @@ export default function Module04OfficialDocsRoute({
                   <p className="font-semibold text-slate-900 mb-1">Tóm tắt:</p>
                   <p>{selectedDoc.summary}</p>
                 </div>
-                <div className="rounded-lg bg-white p-3 border border-slate-200 whitespace-pre-wrap max-h-[340px] overflow-y-auto">
-                  <p className="font-semibold text-slate-900 mb-1">
+                <div className="nd30-paper-sheet rounded-lg p-4 border border-[#E5DEC9] border-t-2 border-t-[#B45309] whitespace-pre-wrap max-h-[340px] overflow-y-auto">
+                  <p className="font-sans font-semibold text-[#0C1E35] text-xs mb-2">
                     Nội dung trích lục phục vụ tra cứu AI:
                   </p>
-                  <p>{selectedDoc.content}</p>
+                  <p className="font-serif text-[13.5px] leading-[1.75] text-stone-900">
+                    {selectedDoc.content}
+                  </p>
                 </div>
               </div>
             </>
