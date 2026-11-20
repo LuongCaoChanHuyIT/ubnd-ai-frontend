@@ -3,6 +3,7 @@ import { useNavigate, useOutletContext, useSearchParams } from "react-router";
 import {
   AlertTriangle,
   CheckSquare,
+  Eye,
   FileSpreadsheet,
   FileText,
   FlaskConical,
@@ -35,6 +36,10 @@ import {
   getOrInitSessionId,
   rotateSessionId,
 } from "~/lib/session";
+import {
+  DirectDocumentViewerDialog,
+  type DocumentViewerTarget,
+} from "~/components/workspace/document-viewer-dialog";
 import {
   EmptyStatePanel,
   ModuleHeader,
@@ -85,6 +90,9 @@ export default function Module05DocSessionRoute() {
     tone: "info" | "error";
     text: string;
   } | null>(null);
+  const [viewerTarget, setViewerTarget] = useState<DocumentViewerTarget | null>(
+    null,
+  );
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const sampleDossier = DEPARTMENT_SAMPLE_DOSSIERS[deptId];
@@ -425,12 +433,37 @@ export default function Module05DocSessionRoute() {
                         />
                         {f.filename}
                       </span>
-                      <Badge
-                        variant="secondary"
-                        className="text-[10px] shrink-0 tabular-nums"
-                      >
-                        {Math.max(1, Math.round(f.size_bytes / 1024))} KB
-                      </Badge>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <Badge
+                          variant="secondary"
+                          className="text-[10px] shrink-0 tabular-nums"
+                        >
+                          {Math.max(1, Math.round(f.size_bytes / 1024))} KB
+                        </Badge>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            setViewerTarget({
+                              kind: "session",
+                              sessionId:
+                                sessionId ||
+                                getOrInitSessionId(
+                                  deptId,
+                                  activeActorEmail,
+                                  activeTenantSlug,
+                                ),
+                              departmentId: deptId,
+                              file: f,
+                            })
+                          }
+                          className="h-6 px-2 text-[11px] gap-1 border-[#1B4D89]/30 bg-white text-[#1B4D89] hover:bg-[#EEF4FB]"
+                        >
+                          <Eye aria-hidden="true" className="h-3 w-3" />
+                          Xem trực tiếp
+                        </Button>
+                      </div>
                     </div>
                     <p className="text-[11px] text-emerald-700">{f.parse_note}</p>
                     <p className="text-slate-600 line-clamp-2">
@@ -523,6 +556,12 @@ export default function Module05DocSessionRoute() {
           </CardContent>
         </Card>
       </div>
+
+      <DirectDocumentViewerDialog
+        open={Boolean(viewerTarget)}
+        onOpenChange={(open) => !open && setViewerTarget(null)}
+        target={viewerTarget}
+      />
     </div>
   );
 }

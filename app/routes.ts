@@ -10,6 +10,7 @@ export default [
     route("dieu-hanh-cong-viec", "routes/m06-tasks.tsx"),
     route("quan-tri-he-thong", "routes/m07-admin.tsx"),
   ]),
+  route("dang-nhap", "routes/login.tsx"),
   route("hello-check", "routes/home.tsx"),
   route("api/*", "routes/api-proxy.ts"),
 ] satisfies RouteConfig;

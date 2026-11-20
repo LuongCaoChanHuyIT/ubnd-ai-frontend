@@ -1,7 +1,10 @@
 import {
+  clearAuthSession,
   getActiveActorEmail,
+  getActiveAuthToken,
   getActiveTenantSlug,
   parseServerCookies,
+  setAuthSession,
 } from "./session.ts";
 
 export interface HelloPayload {
@@ -45,12 +48,16 @@ export interface TenantSummary {
 }
 
 export interface DemoAccount {
+  id?: number;
   email: string;
   full_name: string;
   position: string;
   role: "owner" | "officer";
   department_id: DepartmentId;
   private_repo_access: boolean;
+  can_manage_docs?: boolean;
+  can_approve_doc_requests?: boolean;
+  can_manage_tasks?: boolean;
 }
 
 export interface BootstrapPayload {
@@ -61,10 +68,27 @@ export interface BootstrapPayload {
   demo_accounts: DemoAccount[];
 }
 
+export interface AuthAccountsPayload {
+  commune_name: string;
+  active_tenant_slug: string;
+  available_tenants: TenantSummary[];
+  demo_accounts: RbacUser[];
+}
+
+export interface AuthLoginResponse {
+  token: string;
+  tenant_slug: string;
+  commune_name: string;
+  user: RbacUser;
+}
+
 export interface CitationItem {
+  id?: number | null;
   doc_number: string;
   title: string;
   tier: DocTier | string;
+  source_url?: string;
+  has_attachment?: boolean;
 }
 
 export interface SessionFileItem {
@@ -75,6 +99,8 @@ export interface SessionFileItem {
   extracted_text: string;
   parse_note: string;
   uploaded_at: string;
+  mime_type?: string;
+  has_raw?: boolean;
 }
 
 export interface SessionMessageItem {
@@ -82,6 +108,7 @@ export interface SessionMessageItem {
   mode: AssistantMode | string;
   content: string;
   citations: CitationItem[];
+  model_used?: string | null;
   created_at: string;
 }
 
@@ -114,6 +141,7 @@ export interface ExtendedAnalyzeResponse {
   context: string;
   scope_notice: string;
   options: ExtendedOption[];
+  model_used?: string | null;
 }
 
 export interface AuditCriterion {
@@ -129,6 +157,7 @@ export interface AuditReport {
   department_id: DepartmentId;
   criteria: AuditCriterion[];
   summary: string;
+  model_used?: string | null;
 }
 
 export interface OfficialDoc {
@@ -143,6 +172,11 @@ export interface OfficialDoc {
   status: string;
   summary: string;
   content: string;
+  source_url?: string;
+  attachment_filename?: string;
+  attachment_mime?: string;
+  attachment_size?: number;
+  has_attachment?: boolean;
   created_at: string;
 }
 
@@ -168,6 +202,7 @@ export interface SessionProcessResult {
   file_count: number;
   result_markdown: string;
   highlights: string[];
+  model_used?: string | null;
 }
 
 export interface TaskItem {
@@ -205,6 +240,9 @@ export interface RbacUser {
   role: "owner" | "officer";
   department_id: DepartmentId;
   private_repo_access: boolean;
+  can_manage_docs?: boolean;
+  can_approve_doc_requests?: boolean;
+  can_manage_tasks?: boolean;
   active: boolean;
   created_at: string;
 }
@@ -219,6 +257,69 @@ export interface ApiConnector {
   api_key_masked: string;
   active: boolean;
   updated_at: string;
+}
+
+export interface GeminiModelPreset {
+  id: string;
+  label: string;
+  tier: string;
+  description: string;
+}
+
+export const GEMINI_MODEL_PRESETS: readonly GeminiModelPreset[] = [
+  {
+    id: "gemini-4-carbon",
+    label: "Gemini 4 Carbon — Suy luận chuyên sâu (1M tokens)",
+    tier: "Frontier",
+    description:
+      "Mạnh nhất cho thẩm định pháp lý phức tạp, đối chiếu hồ sơ nhiều tài liệu và dự thảo quan trọng.",
+  },
+  {
+    id: "gemini-4-argon",
+    label: "Gemini 4 Argon — Suy luận hiệu suất cao (1M tokens)",
+    tier: "Reasoning",
+    description:
+      "Cân bằng tối ưu giữa chiều sâu phân tích nghiệp vụ công vụ và tốc độ phản hồi.",
+  },
+  {
+    id: "gemini-4-hydrogen",
+    label: "Gemini 4 Hydrogen — Mặc định đa năng tốc độ cao (1M tokens)",
+    tier: "Recommended",
+    description:
+      "Mô hình mặc định tốc độ nhanh, ổn định, tương thích rộng với mọi hạn mức khóa Google AI Studio.",
+  },
+  {
+    id: "gemini-3.5-flash-lite",
+    label: "Gemini 3.5 Flash-Lite — Siêu tốc, tiết kiệm hạn mức (1M tokens)",
+    tier: "Fast",
+    description:
+      "Phản hồi siêu nhanh với hạn mức thấp nhất cho tác vụ tra cứu và tóm tắt thường xuyên.",
+  },
+] as const;
+
+export interface ConnectorProbeResponse {
+  ok: boolean;
+  provider: string;
+  resolved_model: string;
+  latency_ms: number;
+  sample_reply: string;
+  detail: string;
+}
+
+export function formatModelBadgeLabel(modelUsed: string | null | undefined): string {
+  const cleaned = (modelUsed ?? "").trim();
+  switch (cleaned) {
+    case "gemini-4-carbon":
+      return "Gemini 4 Carbon";
+    case "gemini-4-argon":
+      return "Gemini 4 Argon";
+    case "gemini-4-hydrogen":
+      return "Gemini 4 Hydrogen";
+    case "gemini-3.5-flash-lite":
+      return "Gemini 3.5 Flash-Lite";
+    default:
+      return cleaned;
+  }
 }
 
 export interface AuditLogEntry {
@@ -293,13 +394,17 @@ export function normalizeDepartmentId(raw: string | null | undefined): Departmen
 }
 
 export function extractServerAuthHeaders(request: Request): Record<string, string> {
-  const { actorEmail, tenantSlug } = parseServerCookies(
+  const { actorEmail, tenantSlug, authToken } = parseServerCookies(
     request.headers.get("cookie"),
   );
-  return {
+  const out: Record<string, string> = {
     "X-Actor-Email": actorEmail,
     "X-Tenant-Slug": tenantSlug,
   };
+  if (authToken) {
+    out.Authorization = `Bearer ${authToken}`;
+  }
+  return out;
 }
 
 export function formatHttpErrorMessage(
@@ -368,6 +473,13 @@ export async function apiRequest<T>(
     headers["X-Tenant-Slug"] = getActiveTenantSlug();
   }
 
+  if (typeof window !== "undefined" && !headers.Authorization) {
+    const activeToken = getActiveAuthToken();
+    if (activeToken) {
+      headers.Authorization = `Bearer ${activeToken}`;
+    }
+  }
+
   if (options?.body !== undefined) {
     headers["Content-Type"] = "application/json";
   }
@@ -416,14 +528,22 @@ export async function uploadSessionFile(
     tenantSlug ??
     (typeof window !== "undefined" ? getActiveTenantSlug() : "default");
 
+  const reqHeaders: Record<string, string> = {
+    "X-Actor-Email": resolvedActor,
+    "X-Tenant-Slug": resolvedTenant,
+  };
+  if (typeof window !== "undefined") {
+    const activeToken = getActiveAuthToken();
+    if (activeToken) {
+      reqHeaders.Authorization = `Bearer ${activeToken}`;
+    }
+  }
+
   const response = await fetch(
     `${resolvedBase}/api/m05/sessions/${encodeURIComponent(sessionId)}/upload?department_id=${encodeURIComponent(departmentId)}`,
     {
       method: "POST",
-      headers: {
-        "X-Actor-Email": resolvedActor,
-        "X-Tenant-Slug": resolvedTenant,
-      },
+      headers: reqHeaders,
       body: form,
     },
   );
@@ -462,6 +582,147 @@ export async function wipeSessionState(
   return apiRequest<{ wiped: boolean; session_id: string }>(
     `/api/sessions/${encodeURIComponent(sessionId)}?department_id=${encodeURIComponent(departmentId)}&module_code=${encodeURIComponent(moduleCode)}`,
     { method: "DELETE" },
+  );
+}
+
+export async function loginWithPassword(params: {
+  email: string;
+  password: string;
+  tenantSlug?: string;
+  baseUrl?: string;
+}): Promise<AuthLoginResponse> {
+  const res = await apiRequest<AuthLoginResponse>("/api/auth/login", {
+    method: "POST",
+    baseUrl: params.baseUrl,
+    tenantSlug: params.tenantSlug ?? "default",
+    body: {
+      email: params.email.trim().toLowerCase(),
+      password: params.password,
+      tenant_slug: params.tenantSlug ?? "default",
+    },
+  });
+  setAuthSession({
+    token: res.token,
+    actorEmail: res.user.email,
+    tenantSlug: res.tenant_slug,
+  });
+  return res;
+}
+
+export async function logoutSession(baseUrl?: string): Promise<void> {
+  try {
+    await apiRequest<{ logged_out: boolean }>("/api/auth/logout", {
+      method: "POST",
+      baseUrl,
+    });
+  } catch {
+    // Always clear client token even if network fails
+  } finally {
+    clearAuthSession();
+  }
+}
+
+export async function uploadOfficialDocAttachment(
+  docId: number,
+  file: File,
+  baseUrl?: string,
+): Promise<OfficialDoc> {
+  const form = new FormData();
+  form.append("file", file);
+  const resolvedBase = (baseUrl ?? resolveClientApiBase())
+    .trim()
+    .replace(/\/+$/, "");
+  const headers: Record<string, string> = {
+    "X-Actor-Email":
+      typeof window !== "undefined" ? getActiveActorEmail() : "tsh.co@tshorg.vn",
+    "X-Tenant-Slug":
+      typeof window !== "undefined" ? getActiveTenantSlug() : "default",
+  };
+  if (typeof window !== "undefined") {
+    const tok = getActiveAuthToken();
+    if (tok) headers.Authorization = `Bearer ${tok}`;
+  }
+  const response = await fetch(
+    `${resolvedBase}/api/m04/documents/${encodeURIComponent(String(docId))}/attachment`,
+    {
+      method: "POST",
+      headers,
+      body: form,
+    },
+  );
+  if (!response.ok) {
+    let rawDetail: unknown;
+    try {
+      const errJson = (await response.json()) as { detail?: unknown };
+      rawDetail = errJson?.detail;
+    } catch {
+      // ignore
+    }
+    throw new ApiError(
+      response.status,
+      formatHttpErrorMessage(response.status, rawDetail),
+    );
+  }
+  return (await response.json()) as OfficialDoc;
+}
+
+export async function fetchBinaryBlob(
+  path: string,
+  options?: { baseUrl?: string },
+): Promise<{ blob: Blob; contentType: string }> {
+  const resolvedBase = (options?.baseUrl ?? resolveClientApiBase())
+    .trim()
+    .replace(/\/+$/, "");
+  const headers: Record<string, string> = {
+    "X-Actor-Email":
+      typeof window !== "undefined" ? getActiveActorEmail() : "tsh.co@tshorg.vn",
+    "X-Tenant-Slug":
+      typeof window !== "undefined" ? getActiveTenantSlug() : "default",
+  };
+  if (typeof window !== "undefined") {
+    const tok = getActiveAuthToken();
+    if (tok) headers.Authorization = `Bearer ${tok}`;
+  }
+  const response = await fetch(`${resolvedBase}${path}`, {
+    method: "GET",
+    headers,
+  });
+  if (!response.ok) {
+    let rawDetail: unknown;
+    try {
+      const errJson = (await response.json()) as { detail?: unknown };
+      rawDetail = errJson?.detail;
+    } catch {
+      // ignore
+    }
+    throw new ApiError(
+      response.status,
+      formatHttpErrorMessage(response.status, rawDetail),
+    );
+  }
+  const contentType =
+    response.headers.get("content-type") ?? "application/octet-stream";
+  const blob = await response.blob();
+  return { blob, contentType };
+}
+
+export async function probeApiConnector(
+  connectorId: number,
+  payload: {
+    provider: string;
+    base_url: string;
+    model_name: string;
+    api_key?: string | null;
+  },
+  baseUrl?: string,
+): Promise<ConnectorProbeResponse> {
+  return apiRequest<ConnectorProbeResponse>(
+    `/api/m07/api-connectors/${encodeURIComponent(String(connectorId))}/test`,
+    {
+      method: "POST",
+      baseUrl,
+      body: payload,
+    },
   );
 }
 

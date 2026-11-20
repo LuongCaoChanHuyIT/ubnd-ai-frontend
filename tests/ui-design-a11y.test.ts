@@ -263,3 +263,50 @@ test("Final review fixes: ND30 two-column footer + long commune header, manual t
   );
   assert.match(m06Src, /<Progress[^>]*aria-label=/);
 });
+
+test("UI smoothness upgrades: parallel layout loader, shouldRevalidate, prefetch=intent, top progress shimmer, optimistic M01 turn, deferred search, and GPU button transitions", () => {
+  const layoutSrc = fs.readFileSync(
+    path.join(APP_DIR, "app/routes/workspace-layout.tsx"),
+    "utf-8",
+  );
+  assert.match(layoutSrc, /Promise\.allSettled/);
+  assert.match(layoutSrc, /export function shouldRevalidate/);
+
+  const shellSrc = fs.readFileSync(
+    path.join(APP_DIR, "app/components/layout/workspace-shell.tsx"),
+    "utf-8",
+  );
+  assert.match(shellSrc, /prefetch="intent"/);
+  assert.match(shellSrc, /useNavigation/);
+  assert.match(shellSrc, /civic-nav-progress/);
+
+  const btnSrc = fs.readFileSync(
+    path.join(APP_DIR, "app/components/ui/button.tsx"),
+    "utf-8",
+  );
+  assert.doesNotMatch(btnSrc, /\btransition-all\b/);
+  assert.match(btnSrc, /scale-\[0\.985\]/);
+
+  const cssSrc = fs.readFileSync(path.join(APP_DIR, "app/app.css"), "utf-8");
+  assert.match(cssSrc, /\.civic-nav-progress/);
+  assert.match(cssSrc, /content-visibility:\s*auto/);
+
+  const m01Src = fs.readFileSync(
+    path.join(APP_DIR, "app/routes/m01-assistant.tsx"),
+    "utf-8",
+  );
+  assert.match(m01Src, /pendingUserMessage/);
+  assert.match(m01Src, /scrollIntoView/);
+
+  const m06Src = fs.readFileSync(
+    path.join(APP_DIR, "app/routes/m06-tasks.tsx"),
+    "utf-8",
+  );
+  assert.match(m06Src, /useDeferredValue/);
+
+  const m07Src = fs.readFileSync(
+    path.join(APP_DIR, "app/routes/m07-admin.tsx"),
+    "utf-8",
+  );
+  assert.match(m07Src, /useDeferredValue/);
+});

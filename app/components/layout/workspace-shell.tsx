@@ -4,6 +4,7 @@ import {
   Outlet,
   useLocation,
   useNavigate,
+  useNavigation,
   useRevalidator,
   useSearchParams,
 } from "react-router";
@@ -17,6 +18,7 @@ import {
   History,
   Link2,
   Lock,
+  LogOut,
   Menu,
   MessageSquareText,
   Plus,
@@ -30,6 +32,7 @@ import {
 } from "lucide-react";
 import {
   LEGAL_DISCLAIMER_TEXT,
+  logoutSession,
   type Department,
   type DepartmentId,
   type RbacUser,
@@ -38,10 +41,12 @@ import {
 } from "~/lib/api";
 import {
   canAccessM07Admin,
+  canApproveDocRequests,
+  canManageDepartmentTasks,
+  canManageOfficialDocs,
   isDepartmentLockedForRole,
   normalizeM04Tab,
   resolveEffectiveDepartmentForUser,
-  resolvePostActorSwitchTarget,
 } from "~/lib/m06-m07-helpers";
 import {
   DEFAULT_ACTOR_EMAIL,
@@ -191,32 +196,23 @@ export function WorkspaceShell({
 }: WorkspaceShellProps) {
   const location = useLocation();
   const navigate = useNavigate();
+  const navigation = useNavigation();
   const revalidator = useRevalidator();
   const [searchParams] = useSearchParams();
   const [actorEmail, setActorEmailState] = useState(resolvedActorEmail);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const isRoutePending =
+    navigation.state !== "idle" || revalidator.state !== "idle";
 
   useEffect(() => {
     const synced = ensureBrowserIdentityCookies();
-    let activeEmail = synced.actorEmail;
-
-    const matchedInTenant = users.find(
-      (u) => u.email.toLowerCase() === activeEmail.toLowerCase(),
-    );
-    if (!matchedInTenant && users.length > 0) {
-      activeEmail = users[0].email;
-      setActiveActorEmail(activeEmail);
+    if (synced.actorEmail.toLowerCase() !== resolvedActorEmail.toLowerCase()) {
+      setActiveActorEmail(resolvedActorEmail);
     }
-
     if (synced.tenantSlug !== activeTenantSlug) {
       setActiveTenantSlug(activeTenantSlug);
     }
-
-    setActorEmailState(activeEmail);
-
-    if (activeEmail.toLowerCase() !== resolvedActorEmail.toLowerCase()) {
-      revalidator.revalidate();
-    }
+    setActorEmailState(resolvedActorEmail);
 
     const onActorChanged = (ev: Event) => {
       const next = (ev as CustomEvent<string>).detail;
@@ -226,7 +222,7 @@ export function WorkspaceShell({
     };
     window.addEventListener("ubnd-actor-changed", onActorChanged);
     return () => window.removeEventListener("ubnd-actor-changed", onActorChanged);
-  }, [activeTenantSlug, resolvedActorEmail, users]);
+  }, [activeTenantSlug, resolvedActorEmail]);
 
   const currentUser =
     users.find((u) => u.email.toLowerCase() === actorEmail.toLowerCase()) ??
@@ -300,21 +296,10 @@ export function WorkspaceShell({
     navigate(`${location.pathname}?${nextParams.toString()}`);
   }
 
-  function handleActorSwitch(nextEmail: string) {
-    setActiveActorEmail(nextEmail);
-    setActorEmailState(nextEmail);
-    const matched = users.find(
-      (u) => u.email.toLowerCase() === nextEmail.toLowerCase(),
-    );
-    if (matched) {
-      const targetUrl = resolvePostActorSwitchTarget(
-        location.pathname,
-        searchParams.toString(),
-        matched,
-      );
-      navigate(targetUrl);
-    }
-    revalidator.revalidate();
+  async function handleLogout() {
+    setMobileOpen(false);
+    await logoutSession();
+    navigate("/dang-nhap", { replace: true });
   }
 
   function switchTenant(nextSlug: string, preferredAdminEmail?: string) {
@@ -323,7 +308,7 @@ export function WorkspaceShell({
     const nextEmail =
       cleanSlug === "default"
         ? DEFAULT_ACTOR_EMAIL
-        : (preferredAdminEmail?.trim().toLowerCase() || DEFAULT_ACTOR_EMAIL);
+        : (preferredAdminEmail?.trim().toLowerCase() || actorEmail || DEFAULT_ACTOR_EMAIL);
     setActiveActorEmail(nextEmail);
     setActorEmailState(nextEmail);
     revalidator.revalidate();
@@ -345,6 +330,7 @@ export function WorkspaceShell({
       <Link
         key={item.id}
         to={buildHref(item.pathname, item.tab)}
+        prefetch="intent"
         viewTransition
         aria-current={active ? "page" : undefined}
         onClick={() => setMobileOpen(false)}
@@ -542,7 +528,7 @@ export function WorkspaceShell({
           )}
         </nav>
 
-        {/* Active Account / Role Switcher Footer */}
+        {/* Active Authenticated Account + Granular Permissions + Logout Footer */}
         <div className="border-t border-white/10 p-3 space-y-2 bg-[#081322]">
           <div className="flex items-center gap-2.5">
             <div
@@ -561,28 +547,44 @@ export function WorkspaceShell({
               <p className="text-[11px] text-slate-300 truncate">
                 {currentUser.role === "owner"
                   ? "Chủ sở hữu · Toàn quyền"
-                  : `Cán bộ phòng ${currentUser.department_id}`}
+                  : `${currentUser.full_name} · ${currentUser.department_id}`}
               </p>
             </div>
           </div>
-          {users.length > 0 && (
-            <Select value={currentUser.email} onValueChange={handleActorSwitch}>
-              <SelectTrigger
-                aria-label="Chuyển tài khoản phiên làm việc"
-                size="sm"
-                className="h-8 w-full border-white/15 bg-[#0C1E35] text-xs text-slate-200"
-              >
-                <SelectValue placeholder="Đổi tài khoản làm việc…" />
-              </SelectTrigger>
-              <SelectContent>
-                {users.map((u) => (
-                  <SelectItem key={u.email} value={u.email} className="text-xs">
-                    {u.email} ({u.role === "owner" ? "Chủ sở hữu" : u.department_id})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+
+          <div className="flex flex-wrap gap-1">
+            {canManageOfficialDocs(currentUser) && (
+              <span className="inline-flex items-center rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-medium text-emerald-200">
+                Kho VB chính thức
+              </span>
+            )}
+            {canApproveDocRequests(currentUser) && (
+              <span className="inline-flex items-center rounded bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-medium text-sky-200">
+                Duyệt đề nghị VB
+              </span>
+            )}
+            {canManageDepartmentTasks(currentUser) && (
+              <span className="inline-flex items-center rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-medium text-slate-200">
+                Giao việc
+              </span>
+            )}
+            {currentUser.private_repo_access && (
+              <span className="inline-flex items-center rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium text-amber-200">
+                Kho riêng
+              </span>
+            )}
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void handleLogout()}
+            className="h-8 w-full border-white/15 bg-[#0C1E35] text-xs text-slate-100 hover:bg-[#152C4A] hover:text-white gap-1.5"
+          >
+            <LogOut aria-hidden="true" className="h-3.5 w-3.5" />
+            Đăng xuất / Đổi tài khoản
+          </Button>
         </div>
       </div>
     );
@@ -610,6 +612,12 @@ export function WorkspaceShell({
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Top Header */}
         <header className="sticky top-0 z-20 flex h-[68px] items-center justify-between gap-3 border-b border-slate-200/90 bg-white/95 backdrop-blur-xs px-4 lg:px-7">
+          {isRoutePending ? (
+            <div
+              aria-hidden="true"
+              className="civic-nav-progress pointer-events-none absolute inset-x-0 top-0 h-[2.5px] overflow-hidden bg-[#EEF4FB]"
+            />
+          ) : null}
           <div className="flex items-center gap-3 min-w-0">
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
               <SheetTrigger asChild>
@@ -673,21 +681,33 @@ export function WorkspaceShell({
               </Button>
             )}
             <Button
+              asChild
               variant="outline"
               size="sm"
               className="hidden sm:inline-flex gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-50"
-              onClick={() => navigate(buildHref("/xu-ly-tai-lieu"))}
             >
-              <Upload aria-hidden="true" className="h-3.5 w-3.5" />
-              Tải tài liệu phiên
+              <Link
+                to={buildHref("/xu-ly-tai-lieu")}
+                prefetch="intent"
+                viewTransition
+              >
+                <Upload aria-hidden="true" className="h-3.5 w-3.5" />
+                Tải tài liệu phiên
+              </Link>
             </Button>
             <Button
+              asChild
               size="sm"
               className="bg-[#1B4D89] hover:bg-[#153E70] text-white gap-1.5"
-              onClick={() => navigate(buildHref("/soan-thao-kiem-tra"))}
             >
-              <Plus aria-hidden="true" className="h-3.5 w-3.5" />
-              Soạn & kiểm tra NĐ30
+              <Link
+                to={buildHref("/soan-thao-kiem-tra")}
+                prefetch="intent"
+                viewTransition
+              >
+                <Plus aria-hidden="true" className="h-3.5 w-3.5" />
+                Soạn & kiểm tra NĐ30
+              </Link>
             </Button>
           </div>
         </header>
@@ -698,7 +718,16 @@ export function WorkspaceShell({
           tabIndex={-1}
           className="flex-1 p-4 lg:p-6 min-w-0 scroll-mt-20 focus:outline-none"
         >
-          <Outlet context={outletContext} />
+          <ViewTransition
+            key={location.pathname}
+            enter="fade-in"
+            exit="fade-out"
+            default="none"
+          >
+            <div className="min-w-0">
+              <Outlet context={outletContext} />
+            </div>
+          </ViewTransition>
         </main>
 
         {/* Verbatim Legal Accountability Footer */}

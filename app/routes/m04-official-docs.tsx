@@ -9,8 +9,10 @@ import {
   AlertTriangle,
   BookOpen,
   CheckCircle2,
+  ExternalLink,
   Eye,
   Lock,
+  Paperclip,
   Plus,
   RefreshCw,
   Search,
@@ -24,6 +26,7 @@ import {
   extractServerAuthHeaders,
   normalizeDepartmentId,
   resolveServerApiBase,
+  uploadOfficialDocAttachment,
   type DocTier,
   type DocUpdateRequest,
   type DocUpdateReviewResponse,
@@ -31,7 +34,16 @@ import {
   type WorkspaceOutletContext,
 } from "~/lib/api";
 import { formatTierLabel } from "~/lib/m03-m05-helpers";
-import { normalizeM04Tab } from "~/lib/m06-m07-helpers";
+import {
+  canApproveDocRequests,
+  canManageOfficialDocs,
+  normalizeM04Tab,
+} from "~/lib/m06-m07-helpers";
+import { isSafeHttpUrl } from "~/lib/vietnamese-search";
+import {
+  DirectDocumentViewerDialog,
+  type DocumentViewerTarget,
+} from "~/components/workspace/document-viewer-dialog";
 import { ModuleHeader } from "~/components/workspace/module-surface";
 import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Badge } from "~/components/ui/badge";
@@ -137,8 +149,15 @@ export default function Module04OfficialDocsRoute({
       : rawDept;
 
   const isOwner = (outlet?.currentUser?.role ?? "owner") === "owner";
+  const canManageDocs = canManageOfficialDocs(
+    outlet?.currentUser ?? { role: "owner", can_manage_docs: true },
+  );
+  const canApproveRequests = canApproveDocRequests(
+    outlet?.currentUser ?? { role: "owner", can_approve_doc_requests: true },
+  );
   const hasPrivateRepoAccess =
     isOwner || Boolean(outlet?.currentUser?.private_repo_access ?? true);
+  const canAddAnyDoc = canManageDocs || hasPrivateRepoAccess;
 
   const activeTab = normalizeM04Tab(searchParams.get("tab"));
 
@@ -146,9 +165,14 @@ export default function Module04OfficialDocsRoute({
   const [addOpen, setAddOpen] = useState(false);
   const [docNumber, setDocNumber] = useState("");
   const [docTitle, setDocTitle] = useState("");
-  const [docTier, setDocTier] = useState<DocTier>("kho_rieng");
+  const [docTier, setDocTier] = useState<DocTier>(
+    canManageDocs ? "dia_phuong" : "kho_rieng",
+  );
+  const [docSourceUrl, setDocSourceUrl] = useState("");
+  const [docAttachFile, setDocAttachFile] = useState<File | null>(null);
   const [docContent, setDocContent] = useState("");
   const [busyAdd, setBusyAdd] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const [reqNumber, setReqNumber] = useState("");
   const [reqTitle, setReqTitle] = useState("");
@@ -162,10 +186,10 @@ export default function Module04OfficialDocsRoute({
   } | null>(null);
 
   useEffect(() => {
-    if (!isOwner) {
+    if (!canManageDocs) {
       setDocTier("kho_rieng");
     }
-  }, [isOwner]);
+  }, [canManageDocs]);
 
   useEffect(() => {
     if (loaderData.q && loaderData.documents.length === 1) {
@@ -190,30 +214,67 @@ export default function Module04OfficialDocsRoute({
     setSearchParams(next);
   }
 
+  function canEditSpecificDoc(doc: OfficialDoc): boolean {
+    if (doc.tier === "kho_rieng") {
+      return isOwner || (hasPrivateRepoAccess && doc.department_id === deptId);
+    }
+    return canManageDocs;
+  }
+
   async function handleCreateDoc(ev: React.FormEvent) {
     ev.preventDefault();
     if (!docNumber.trim() || !docTitle.trim() || !docContent.trim()) return;
+    const trimmedUrl = docSourceUrl.trim();
+    if (trimmedUrl && !isSafeHttpUrl(trimmedUrl)) {
+      setCreateError("Đường dẫn nguồn phải bắt đầu bằng http:// hoặc https://");
+      return;
+    }
     setBusyAdd(true);
+    setCreateError(null);
     setFeedback(null);
     try {
-      await apiRequest("/api/m04/documents", {
+      const effectiveTier: DocTier = canManageDocs ? docTier : "kho_rieng";
+      const created = await apiRequest<OfficialDoc>("/api/m04/documents", {
         method: "POST",
         body: {
           doc_number: docNumber.trim(),
           title: docTitle.trim(),
-          doc_type: "Văn bản nội bộ",
-          tier: isOwner ? docTier : "kho_rieng",
-          department_id:
-            (isOwner ? docTier : "kho_rieng") === "kho_rieng" ? deptId : "ALL",
-          issuer: `UBND (${deptId})`,
-          issued_date: "2026-11-18",
+          doc_type:
+            effectiveTier === "kho_rieng" ? "Văn bản nội bộ" : "Văn bản pháp quy",
+          tier: effectiveTier,
+          department_id: effectiveTier === "kho_rieng" ? deptId : "ALL",
+          issuer:
+            effectiveTier === "trung_uong"
+              ? "Cơ quan Trung ương"
+              : `UBND (${deptId})`,
+          issued_date: "2026-11-20",
           summary: docContent.trim().slice(0, 180),
           content: docContent.trim(),
+          source_url: trimmedUrl,
         },
       });
+      const pendingFile = docAttachFile;
       setDocNumber("");
       setDocTitle("");
+      setDocSourceUrl("");
+      setDocAttachFile(null);
       setDocContent("");
+
+      if (pendingFile) {
+        try {
+          await uploadOfficialDocAttachment(created.id, pendingFile);
+        } catch (attErr) {
+          setAddOpen(false);
+          setSelectedDoc(created);
+          revalidator.revalidate();
+          setFeedback({
+            tone: "err",
+            text: `Đã lưu văn bản ${created.doc_number} nhưng đính kèm tệp thất bại: ${attErr instanceof Error ? attErr.message : "Tệp không hợp lệ"}. Bạn có thể đính kèm lại ngay trong cửa sổ xem chi tiết.`,
+          });
+          return;
+        }
+      }
+
       setAddOpen(false);
       setFeedback({
         tone: "ok",
@@ -221,13 +282,47 @@ export default function Module04OfficialDocsRoute({
       });
       revalidator.revalidate();
     } catch (err) {
-      setFeedback({
-        tone: "err",
-        text: err instanceof Error ? err.message : "Không thể thêm văn bản",
-      });
+      setCreateError(
+        err instanceof Error ? err.message : "Không thể thêm văn bản",
+      );
     } finally {
       setBusyAdd(false);
     }
+  }
+
+  async function handleAttachFileToDoc(docId: number, file: File) {
+    const updated = await uploadOfficialDocAttachment(docId, file);
+    setSelectedDoc(updated);
+    setFeedback({
+      tone: "ok",
+      text: `Đã đính kèm tệp '${file.name}' cho văn bản ${updated.doc_number}.`,
+    });
+    revalidator.revalidate();
+  }
+
+  async function handleUpdateDocSourceUrl(docId: number, sourceUrl: string) {
+    const updated = await apiRequest<OfficialDoc>(`/api/m04/documents/${docId}`, {
+      method: "PATCH",
+      body: { source_url: sourceUrl },
+    });
+    setSelectedDoc(updated);
+    setFeedback({
+      tone: "ok",
+      text: `Đã cập nhật đường dẫn nguồn cho văn bản ${updated.doc_number}.`,
+    });
+    revalidator.revalidate();
+  }
+
+  async function handleDeleteDoc(docId: number) {
+    await apiRequest(`/api/m04/documents/${docId}`, {
+      method: "DELETE",
+    });
+    setSelectedDoc(null);
+    setFeedback({
+      tone: "ok",
+      text: "Đã xóa văn bản khỏi danh mục lưu trữ.",
+    });
+    revalidator.revalidate();
   }
 
   async function handleSubmitUpdateRequest(ev: React.FormEvent) {
@@ -251,7 +346,7 @@ export default function Module04OfficialDocsRoute({
       setReqReason("");
       setFeedback({
         tone: "ok",
-        text: "Đã gửi đề nghị cập nhật văn bản thành công; đang chờ Chủ sở hữu phê duyệt.",
+        text: "Đã gửi đề nghị cập nhật văn bản thành công; đang chờ người có thẩm quyền phê duyệt.",
       });
       revalidator.revalidate();
     } catch (err) {
@@ -283,7 +378,7 @@ export default function Module04OfficialDocsRoute({
                     reqItem.tier === "trung_uong"
                       ? "Cơ quan Trung ương"
                       : `UBND (${reqItem.department_id})`,
-                  issued_date: "2026-11-18",
+                  issued_date: "2026-11-20",
                   doc_type: "Văn bản cập nhật",
                   summary: reqItem.reason,
                   content: `${reqItem.title}. Nội dung cập nhật theo đề nghị của phòng ${reqItem.department_id}: ${reqItem.reason}`,
@@ -373,6 +468,17 @@ export default function Module04OfficialDocsRoute({
     );
   }
 
+  const viewerTarget: DocumentViewerTarget | null = selectedDoc
+    ? {
+        kind: "official",
+        doc: selectedDoc,
+        canEdit: canEditSpecificDoc(selectedDoc),
+        onAttachFile: handleAttachFileToDoc,
+        onUpdateSourceUrl: handleUpdateDocSourceUrl,
+        onDeleteDoc: handleDeleteDoc,
+      }
+    : null;
+
   return (
     <div className="mx-auto max-w-6xl space-y-4">
       <ModuleHeader.Root>
@@ -381,24 +487,30 @@ export default function Module04OfficialDocsRoute({
             Mô-đun 04 · Kho pháp lý & Dữ liệu đơn vị · Phòng {deptId}
           </ModuleHeader.Eyebrow>
           <ModuleHeader.Title>
-            Nguồn văn bản chính thức & Kho dữ liệu riêng theo phân quyền
+            Nguồn văn bản chính thức & Xem trực tiếp theo phân quyền
           </ModuleHeader.Title>
           <ModuleHeader.Description>
-            Tra cứu văn bản Trung ương, Địa phương và Kho dữ liệu riêng của phòng;
-            tiếp nhận và phê duyệt đề nghị cập nhật văn bản mới.
+            Tra cứu có dấu hoặc không dấu trên văn bản Trung ương, Địa phương và
+            Kho riêng; xem trực tiếp tệp đính kèm hoặc mở đường dẫn nguồn gốc.
           </ModuleHeader.Description>
         </ModuleHeader.Content>
 
-        {hasPrivateRepoAccess && (
+        {canAddAnyDoc && (
           <ModuleHeader.Actions>
-            <Dialog open={addOpen} onOpenChange={setAddOpen}>
+            <Dialog
+              open={addOpen}
+              onOpenChange={(nextOpen) => {
+                setAddOpen(nextOpen);
+                if (!nextOpen) setCreateError(null);
+              }}
+            >
               <DialogTrigger asChild>
                 <Button
                   size="sm"
                   className="bg-[#1B4D89] hover:bg-[#163E70] text-white gap-1.5"
                 >
                   <Plus aria-hidden="true" className="h-4 w-4" />
-                  {isOwner
+                  {canManageDocs
                     ? "Bổ sung văn bản vào kho"
                     : `Bổ sung vào Kho riêng (${deptId})`}
                 </Button>
@@ -407,127 +519,144 @@ export default function Module04OfficialDocsRoute({
                 <DialogHeader>
                   <DialogTitle>Bổ sung văn bản vào kho ({deptId})</DialogTitle>
                   <DialogDescription>
-                    {isOwner
-                      ? `Quản trị viên có thể bổ sung trực tiếp văn bản Trung ương, Địa phương hoặc Kho dữ liệu riêng phòng ${deptId}.`
-                      : `Cán bộ chuyên môn bổ sung tài liệu vào Kho dữ liệu riêng của phòng ${deptId}; với văn bản Trung ương/Địa phương vui lòng gửi Đề nghị cập nhật.`}
+                    {canManageDocs
+                      ? "Tài khoản có quyền Quản lý Kho văn bản được phép bổ sung văn bản Trung ương, Địa phương, đính kèm tệp gốc và gắn link nguồn."
+                      : `Cán bộ bổ sung tài liệu vào Kho dữ liệu riêng của phòng ${deptId}; với văn bản Trung ương/Địa phương vui lòng gửi Đề nghị cập nhật.`}
                   </DialogDescription>
                 </DialogHeader>
 
-                {!hasPrivateRepoAccess ? (
-                  <div className="space-y-3">
-                    <Alert variant="destructive">
-                      <Lock aria-hidden="true" className="h-4 w-4" />
-                      <AlertDescription className="text-xs">
-                        Tài khoản hiện tại không được cấp quyền ghi vào Kho dữ liệu
-                        riêng của phòng {deptId}. Vui lòng chuyển sang tab{" "}
-                        <strong>Đề nghị cập nhật văn bản</strong> để gửi yêu cầu tới Quản
-                        trị viên.
-                      </AlertDescription>
-                    </Alert>
-                    <DialogFooter>
-                      <Button
-                        type="button"
-                        onClick={() => {
-                          setAddOpen(false);
-                          setTabParam("de_nghi");
-                        }}
-                      >
-                        Mở tab Đề nghị cập nhật
-                      </Button>
-                    </DialogFooter>
+                {createError && (
+                  <Alert variant="destructive" className="py-2">
+                    <AlertDescription className="text-xs">
+                      {createError}
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                <form onSubmit={handleCreateDoc} className="space-y-3">
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="m04-doc-number"
+                      className="block text-xs font-semibold text-slate-700"
+                    >
+                      Số hiệu văn bản
+                    </label>
+                    <Input
+                      id="m04-doc-number"
+                      value={docNumber}
+                      onChange={(e) => setDocNumber(e.target.value)}
+                      placeholder="VD: 30/2020/NĐ-CP hoặc QC-05/2026/UBND-VP"
+                      spellCheck={false}
+                      required
+                    />
                   </div>
-                ) : (
-                  <form onSubmit={handleCreateDoc} className="space-y-3">
-                    <div className="space-y-1">
-                      <label
-                        htmlFor="m04-doc-number"
-                        className="block text-xs font-semibold text-slate-700"
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="m04-doc-title"
+                      className="block text-xs font-semibold text-slate-700"
+                    >
+                      Trích yếu văn bản
+                    </label>
+                    <Input
+                      id="m04-doc-title"
+                      value={docTitle}
+                      onChange={(e) => setDocTitle(e.target.value)}
+                      placeholder="Trích yếu văn bản…"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Phân tầng nguồn kho
+                    </label>
+                    <Select
+                      value={canManageDocs ? docTier : "kho_rieng"}
+                      onValueChange={(v) => setDocTier(v as DocTier)}
+                      disabled={!canManageDocs}
+                    >
+                      <SelectTrigger
+                        aria-label="Phân tầng nguồn kho"
+                        className="w-full min-w-0"
                       >
-                        Số hiệu văn bản
-                      </label>
-                      <Input
-                        id="m04-doc-number"
-                        value={docNumber}
-                        onChange={(e) => setDocNumber(e.target.value)}
-                        placeholder="VD: QC-05/2026/UBND-VP"
-                        spellCheck={false}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label
-                        htmlFor="m04-doc-title"
-                        className="block text-xs font-semibold text-slate-700"
-                      >
-                        Trích yếu văn bản
-                      </label>
-                      <Input
-                        id="m04-doc-title"
-                        value={docTitle}
-                        onChange={(e) => setDocTitle(e.target.value)}
-                        placeholder="Trích yếu văn bản…"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="block text-xs font-semibold text-slate-700">
-                        Phân tầng nguồn kho
-                      </label>
-                      <Select
-                        value={isOwner ? docTier : "kho_rieng"}
-                        onValueChange={(v) => setDocTier(v as DocTier)}
-                        disabled={!isOwner}
-                      >
-                        <SelectTrigger
-                          aria-label="Phân tầng nguồn kho"
-                          className="w-full min-w-0"
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {hasPrivateRepoAccess && (
                           <SelectItem value="kho_rieng">
                             Kho dữ liệu riêng phòng {deptId}
                           </SelectItem>
-                          {isOwner && (
-                            <>
-                              <SelectItem value="dia_phuong">
-                                Văn bản Địa phương (Toàn UBND)
-                              </SelectItem>
-                              <SelectItem value="trung_uong">
-                                Văn bản Trung ương (Toàn UBND)
-                              </SelectItem>
-                            </>
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1">
-                      <label
-                        htmlFor="m04-doc-content"
-                        className="block text-xs font-semibold text-slate-700"
-                      >
-                        Nội dung trích lục phục vụ tra cứu AI
-                      </label>
-                      <Textarea
-                        id="m04-doc-content"
-                        rows={4}
-                        value={docContent}
-                        onChange={(e) => setDocContent(e.target.value)}
-                        placeholder="Nội dung điều khoản cốt lõi phục vụ AI tra cứu…"
-                        required
-                      />
-                    </div>
-                    <DialogFooter>
-                      <Button
-                        type="submit"
-                        disabled={busyAdd}
-                        className="bg-[#1B4D89] hover:bg-[#163E70] text-white"
-                      >
-                        {busyAdd ? "Đang lưu…" : "Lưu văn bản"}
-                      </Button>
-                    </DialogFooter>
-                  </form>
-                )}
+                        )}
+                        {canManageDocs && (
+                          <>
+                            <SelectItem value="dia_phuong">
+                              Văn bản Địa phương (Toàn UBND)
+                            </SelectItem>
+                            <SelectItem value="trung_uong">
+                              Văn bản Trung ương (Toàn UBND)
+                            </SelectItem>
+                          </>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="m04-doc-source-url"
+                      className="block text-xs font-semibold text-slate-700"
+                    >
+                      Đường dẫn nguồn gốc (không bắt buộc)
+                    </label>
+                    <Input
+                      id="m04-doc-source-url"
+                      value={docSourceUrl}
+                      onChange={(e) => setDocSourceUrl(e.target.value)}
+                      placeholder="https://vbpl.vn/… hoặc cổng thông tin chính thống"
+                      spellCheck={false}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="m04-doc-file"
+                      className="block text-xs font-semibold text-slate-700"
+                    >
+                      Tệp văn bản đính kèm trực tiếp (.pdf, .docx, .txt…)
+                    </label>
+                    <Input
+                      id="m04-doc-file"
+                      type="file"
+                      accept=".pdf,.docx,.txt,.md,.csv,.json"
+                      onChange={(e) =>
+                        setDocAttachFile(e.target.files?.[0] ?? null)
+                      }
+                      className="text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="m04-doc-content"
+                      className="block text-xs font-semibold text-slate-700"
+                    >
+                      Nội dung trích lục phục vụ tra cứu AI
+                    </label>
+                    <Textarea
+                      id="m04-doc-content"
+                      rows={4}
+                      value={docContent}
+                      onChange={(e) => setDocContent(e.target.value)}
+                      placeholder="Nội dung điều khoản cốt lõi phục vụ AI tra cứu…"
+                      required
+                    />
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      type="submit"
+                      disabled={busyAdd}
+                      className="bg-[#1B4D89] hover:bg-[#163E70] text-white"
+                    >
+                      {busyAdd ? "Đang lưu…" : "Lưu văn bản"}
+                    </Button>
+                  </DialogFooter>
+                </form>
               </DialogContent>
             </Dialog>
           </ModuleHeader.Actions>
@@ -616,7 +745,7 @@ export default function Module04OfficialDocsRoute({
                     id="m04-search-input"
                     name="q"
                     defaultValue={loaderData.q}
-                    placeholder="Tìm theo số hiệu (VD: 30/2020/NĐ-CP, 399/2026/NĐ-CP) hoặc trích yếu…"
+                    placeholder="Tìm có dấu hoặc không dấu (VD: nghi dinh 30, dat dai, ho tich)…"
                     className="flex-1 min-w-0"
                   />
                   <Button
@@ -661,10 +790,10 @@ export default function Module04OfficialDocsRoute({
                   <TableHeader>
                     <TableRow className="bg-slate-50">
                       <TableHead className="w-[140px]">Số hiệu</TableHead>
-                      <TableHead>Trích yếu & Tóm tắt</TableHead>
+                      <TableHead>Trích yếu & Nguồn đính kèm</TableHead>
                       <TableHead className="w-[145px]">Nguồn kho</TableHead>
                       <TableHead className="w-[110px]">Phạm vi</TableHead>
-                      <TableHead className="w-[90px] text-right">Chi tiết</TableHead>
+                      <TableHead className="w-[130px] text-right">Xem trực tiếp</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -674,55 +803,85 @@ export default function Module04OfficialDocsRoute({
                           colSpan={5}
                           className="py-8 text-center text-xs text-slate-500 whitespace-normal"
                         >
-                          Không tìm thấy văn bản nào khớp với bộ lọc hiện tại.
+                          Không tìm thấy văn bản nào khớp với từ khóa hiện tại.
                         </TableCell>
                       </TableRow>
                     ) : (
-                      loaderData.documents.map((doc) => (
-                        <TableRow key={doc.id}>
-                          <TableCell className="font-semibold text-[#1B4D89] text-xs whitespace-nowrap align-top tabular-nums">
-                            {doc.doc_number}
-                            <div className="text-[11px] font-normal text-slate-500">
-                              {doc.issued_date}
-                            </div>
-                          </TableCell>
-                          <TableCell className="whitespace-normal min-w-[240px] align-top">
-                            <p className="font-semibold text-xs text-slate-900">
-                              {doc.title}
-                            </p>
-                            <p className="text-xs text-slate-600 line-clamp-2 mt-0.5">
-                              {doc.summary}
-                            </p>
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap align-top">
-                            {renderTierBadge(doc.tier)}
-                          </TableCell>
-                          <TableCell className="text-xs whitespace-nowrap align-top">
-                            <span className="inline-flex items-center gap-1 font-medium text-slate-700">
-                              <Shield
-                                aria-hidden="true"
-                                className="h-3 w-3 text-slate-400 shrink-0"
-                              />
-                              {doc.department_id === "ALL"
-                                ? "Toàn UBND"
-                                : `Phòng ${doc.department_id}`}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right whitespace-nowrap align-top">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              aria-label={`Xem chi tiết văn bản ${doc.doc_number}`}
-                              onClick={() => setSelectedDoc(doc)}
-                              className="h-7 px-2 text-xs gap-1 whitespace-nowrap text-[#1B4D89] hover:bg-[#EEF4FB]"
-                            >
-                              <Eye aria-hidden="true" className="h-3.5 w-3.5" />
-                              Xem
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))
+                      loaderData.documents.map((doc) => {
+                        const safeUrl = isSafeHttpUrl(doc.source_url)
+                          ? doc.source_url!.trim()
+                          : "";
+                        return (
+                          <TableRow key={doc.id}>
+                            <TableCell className="font-semibold text-[#1B4D89] text-xs whitespace-nowrap align-top tabular-nums">
+                              {doc.doc_number}
+                              <div className="text-[11px] font-normal text-slate-500">
+                                {doc.issued_date}
+                              </div>
+                            </TableCell>
+                            <TableCell className="whitespace-normal min-w-[240px] align-top">
+                              <p className="font-semibold text-xs text-slate-900">
+                                {doc.title}
+                              </p>
+                              <p className="font-serif text-xs text-slate-600 line-clamp-2 mt-0.5">
+                                {doc.summary}
+                              </p>
+                              <div className="flex items-center gap-2 flex-wrap mt-1">
+                                {doc.has_attachment && (
+                                  <span className="inline-flex items-center gap-1 rounded bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800">
+                                    <Paperclip
+                                      aria-hidden="true"
+                                      className="h-2.5 w-2.5"
+                                    />
+                                    Tệp gốc: {doc.attachment_filename}
+                                  </span>
+                                )}
+                                {safeUrl && (
+                                  <a
+                                    href={safeUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-[11px] font-medium text-[#1B4D89] hover:underline"
+                                  >
+                                    <ExternalLink
+                                      aria-hidden="true"
+                                      className="h-3 w-3"
+                                    />
+                                    Nguồn gốc
+                                  </a>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap align-top">
+                              {renderTierBadge(doc.tier)}
+                            </TableCell>
+                            <TableCell className="text-xs whitespace-nowrap align-top">
+                              <span className="inline-flex items-center gap-1 font-medium text-slate-700">
+                                <Shield
+                                  aria-hidden="true"
+                                  className="h-3 w-3 text-slate-400 shrink-0"
+                                />
+                                {doc.department_id === "ALL"
+                                  ? "Toàn UBND"
+                                  : `Phòng ${doc.department_id}`}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right whitespace-nowrap align-top">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                aria-label={`Xem trực tiếp văn bản ${doc.doc_number}`}
+                                onClick={() => setSelectedDoc(doc)}
+                                className="h-7 px-2.5 text-xs gap-1 whitespace-nowrap border-[#1B4D89]/30 text-[#1B4D89] hover:bg-[#EEF4FB]"
+                              >
+                                <Eye aria-hidden="true" className="h-3.5 w-3.5" />
+                                Xem trực tiếp
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
                     )}
                   </TableBody>
                 </Table>
@@ -742,7 +901,7 @@ export default function Module04OfficialDocsRoute({
               </CardTitle>
               <CardDescription className="text-xs">
                 Khi phát hiện văn bản mới ban hành hoặc hết hiệu lực, cán bộ gửi đề
-                nghị để Quản trị viên phê duyệt và nhập vào nguồn chính thức.
+                nghị để người được phân quyền phê duyệt và nhập vào nguồn chính thức.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -834,8 +993,8 @@ export default function Module04OfficialDocsRoute({
                 Danh sách đề nghị cập nhật đã ghi nhận ({loaderData.updateRequests.length})
               </CardTitle>
               <CardDescription className="text-xs">
-                {isOwner
-                  ? "Chủ sở hữu có thể Phê duyệt & Nhập kho trực tiếp hoặc Từ chối từng đề nghị."
+                {canApproveRequests
+                  ? "Tài khoản có quyền Phê duyệt đề nghị văn bản có thể Duyệt & Nhập kho trực tiếp hoặc Từ chối."
                   : `Hiển thị các đề nghị cập nhật của bộ phận ${deptId}.`}
               </CardDescription>
             </CardHeader>
@@ -866,7 +1025,7 @@ export default function Module04OfficialDocsRoute({
                             Người đề nghị: {r.requested_by} · {formatTierLabel(r.tier)}
                           </p>
 
-                          {isOwner && isPending && (
+                          {canApproveRequests && isPending && (
                             <div className="flex items-center gap-1.5">
                               <Button
                                 type="button"
@@ -902,41 +1061,11 @@ export default function Module04OfficialDocsRoute({
         </TabsContent>
       </Tabs>
 
-      {/* Document Preview Dialog */}
-      <Dialog
-        open={Boolean(selectedDoc)}
+      <DirectDocumentViewerDialog
+        open={Boolean(viewerTarget)}
         onOpenChange={(open) => !open && setSelectedDoc(null)}
-      >
-        <DialogContent className="max-w-2xl">
-          {selectedDoc && (
-            <>
-              <DialogHeader>
-                <DialogTitle className="text-balance">
-                  {selectedDoc.doc_number} · {selectedDoc.title}
-                </DialogTitle>
-                <DialogDescription className="tabular-nums">
-                  Cơ quan ban hành: {selectedDoc.issuer} · Ngày ban hành:{" "}
-                  {selectedDoc.issued_date} · Phạm vi: {selectedDoc.department_id}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-3 text-xs leading-relaxed text-slate-700">
-                <div className="rounded-lg bg-slate-50 p-3 border border-slate-200">
-                  <p className="font-semibold text-slate-900 mb-1">Tóm tắt:</p>
-                  <p>{selectedDoc.summary}</p>
-                </div>
-                <div className="nd30-paper-sheet rounded-lg p-4 border border-[#E5DEC9] border-t-2 border-t-[#B45309] whitespace-pre-wrap max-h-[340px] overflow-y-auto">
-                  <p className="font-sans font-semibold text-[#0C1E35] text-xs mb-2">
-                    Nội dung trích lục phục vụ tra cứu AI:
-                  </p>
-                  <p className="font-serif text-[13.5px] leading-[1.75] text-stone-900">
-                    {selectedDoc.content}
-                  </p>
-                </div>
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+        target={viewerTarget}
+      />
     </div>
   );
 }

@@ -9,6 +9,7 @@ import {
   ArrowUp,
   BookOpen,
   CheckSquare,
+  Eye,
   FileText,
   Paperclip,
   Plus,
@@ -20,6 +21,7 @@ import type { Route } from "./+types/m01-assistant";
 import {
   apiRequest,
   extractServerAuthHeaders,
+  formatModelBadgeLabel,
   getSessionState,
   normalizeDepartmentId,
   resolveServerApiBase,
@@ -27,7 +29,9 @@ import {
   wipeSessionState,
   type AssistantMode,
   type ChatTurnResponse,
+  type CitationItem,
   type Department,
+  type OfficialDoc,
   type SessionFileItem,
   type SessionMessageItem,
   type SessionState,
@@ -45,6 +49,10 @@ import {
   setSavedAssistantMode,
 } from "~/lib/session";
 import { CivicCrest } from "~/components/workspace/civic-crest";
+import {
+  DirectDocumentViewerDialog,
+  type DocumentViewerTarget,
+} from "~/components/workspace/document-viewer-dialog";
 import { ModuleHeader } from "~/components/workspace/module-surface";
 import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Badge } from "~/components/ui/badge";
@@ -109,13 +117,26 @@ export default function Module01AssistantRoute({
   const [files, setFiles] = useState<SessionFileItem[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [pendingUserMessage, setPendingUserMessage] = useState<string | null>(
+    null,
+  );
   const [uploading, setUploading] = useState(false);
   const [statusBanner, setStatusBanner] = useState<{
     tone: "info" | "error";
     text: string;
   } | null>(null);
+  const [viewerTarget, setViewerTarget] = useState<DocumentViewerTarget | null>(
+    null,
+  );
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (messages.length > 0 || pendingUserMessage) {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+  }, [messages.length, pendingUserMessage]);
 
   function handleSelectMode(nextMode: AssistantMode) {
     setModeState(nextMode);
@@ -172,6 +193,7 @@ export default function Module01AssistantRoute({
     const activeSid =
       sessionId || getOrInitSessionId(deptId, activeActorEmail, activeTenantSlug);
     setBusy(true);
+    setPendingUserMessage(text);
     setStatusBanner(null);
     if (!customPrompt) setInput("");
 
@@ -186,10 +208,13 @@ export default function Module01AssistantRoute({
         },
       });
       startTransition(() => {
+        setPendingUserMessage(null);
         setMessages(res.session.messages);
         setFiles(res.session.files);
       });
     } catch (err) {
+      setPendingUserMessage(null);
+      if (!customPrompt) setInput(text);
       setStatusBanner({
         tone: "error",
         text: err instanceof Error ? err.message : "Không thể gửi yêu cầu tới AI",
@@ -252,6 +277,32 @@ export default function Module01AssistantRoute({
       });
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleOpenCitation(cit: CitationItem) {
+    try {
+      if (cit.id) {
+        const doc = await apiRequest<OfficialDoc>(
+          `/api/m04/documents/${encodeURIComponent(String(cit.id))}`,
+        );
+        setViewerTarget({ kind: "official", doc });
+        return;
+      }
+      const res = await apiRequest<{ documents: OfficialDoc[] }>(
+        `/api/m04/documents?department_id=${encodeURIComponent(deptId)}&q=${encodeURIComponent(cit.doc_number)}`,
+      );
+      if (res.documents[0]) {
+        setViewerTarget({ kind: "official", doc: res.documents[0] });
+        return;
+      }
+      navigate(
+        `/nguon-van-ban?dept=${deptId}&q=${encodeURIComponent(cit.doc_number)}`,
+      );
+    } catch {
+      navigate(
+        `/nguon-van-ban?dept=${deptId}&q=${encodeURIComponent(cit.doc_number)}`,
+      );
     }
   }
 
@@ -414,14 +465,30 @@ export default function Module01AssistantRoute({
                   Tệp trong phiên ({files.length}):
                 </span>
                 {files.map((f) => (
-                  <Badge
+                  <button
                     key={f.file_id}
-                    variant="outline"
-                    className="bg-white text-xs text-slate-700 border-[#1B4D89]/25 gap-1"
+                    type="button"
+                    onClick={() =>
+                      setViewerTarget({
+                        kind: "session",
+                        sessionId:
+                          sessionId ||
+                          getOrInitSessionId(
+                            deptId,
+                            activeActorEmail,
+                            activeTenantSlug,
+                          ),
+                        departmentId: deptId,
+                        file: f,
+                      })
+                    }
+                    title={`Xem trực tiếp tệp ${f.filename}`}
+                    className="inline-flex items-center rounded-md border border-[#1B4D89]/25 bg-white px-2 py-0.5 text-xs font-medium text-slate-700 hover:bg-[#EEF4FB] hover:text-[#1B4D89] gap-1 transition-colors"
                   >
                     <FileText aria-hidden="true" className="h-3 w-3 text-[#1B4D89]" />
-                    {f.filename}
-                  </Badge>
+                    <span>{f.filename}</span>
+                    <Eye aria-hidden="true" className="h-3 w-3 text-[#1B4D89]/80" />
+                  </button>
                 ))}
                 <Link
                   to={`/xu-ly-tai-lieu?dept=${deptId}`}
@@ -437,7 +504,7 @@ export default function Module01AssistantRoute({
 
         {/* Conversation Body or Center Empty State */}
         <div className="px-5 sm:px-6 py-6 min-h-[300px] flex flex-col justify-center">
-          {messages.length === 0 ? (
+          {messages.length === 0 && !pendingUserMessage ? (
             <div className="mx-auto max-w-lg text-center space-y-4 py-6">
               <div className="mx-auto flex justify-center">
                 <CivicCrest className="h-12 w-12" />
@@ -493,10 +560,20 @@ export default function Module01AssistantRoute({
                       >
                         {!isUser && (
                           <div className="mb-2 flex items-center justify-between gap-2 flex-wrap">
-                            <Badge className="bg-[#0C1E35] text-white text-[10px] px-2 py-0">
-                              <Sparkles aria-hidden="true" className="h-2.5 w-2.5 mr-1 text-amber-300" />
-                              {formatAssistantModeBadge(msg.mode)}
-                            </Badge>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Badge className="bg-[#0C1E35] text-white text-[10px] px-2 py-0">
+                                <Sparkles aria-hidden="true" className="h-2.5 w-2.5 mr-1 text-amber-300" />
+                                {formatAssistantModeBadge(msg.mode)}
+                              </Badge>
+                              {msg.model_used && (
+                                <Badge
+                                  variant="outline"
+                                  className="border-emerald-300 bg-emerald-50 text-emerald-900 text-[10px] font-semibold px-2 py-0"
+                                >
+                                  {formatModelBadgeLabel(msg.model_used)}
+                                </Badge>
+                              )}
+                            </div>
                             <Button
                               type="button"
                               variant="outline"
@@ -523,14 +600,18 @@ export default function Module01AssistantRoute({
                               Nguồn đối chiếu:
                             </span>
                             {msg.citations.map((cit) => (
-                              <Link
+                              <button
                                 key={cit.doc_number}
-                                to={`/nguon-van-ban?dept=${deptId}&q=${encodeURIComponent(cit.doc_number)}`}
-                                viewTransition
-                                className="inline-flex items-center rounded-md border border-[#1B4D89]/25 bg-white px-2 py-0.5 text-[11px] font-medium text-[#1B4D89] hover:bg-[#EEF4FB]"
+                                type="button"
+                                onClick={() => void handleOpenCitation(cit)}
+                                title="Bấm để xem trực tiếp toàn văn và nguồn gốc văn bản"
+                                className="inline-flex items-center gap-1 rounded-md border border-[#1B4D89]/25 bg-white px-2 py-0.5 text-[11px] font-medium text-[#1B4D89] hover:bg-[#EEF4FB] transition-colors text-left"
                               >
-                                {cit.doc_number} · {cit.title}
-                              </Link>
+                                <Eye aria-hidden="true" className="h-3 w-3 shrink-0" />
+                                <span>
+                                  {cit.doc_number} · {cit.title}
+                                </span>
+                              </button>
                             ))}
                           </div>
                         )}
@@ -539,6 +620,29 @@ export default function Module01AssistantRoute({
                   </ViewTransition>
                 );
               })}
+
+              {pendingUserMessage && (
+                <div className="space-y-3" role="status" aria-live="polite">
+                  <div className="flex flex-col items-end gap-1.5">
+                    <div className="max-w-3xl rounded-2xl bg-[#1B4D89] px-4 py-3 text-sm leading-relaxed text-white whitespace-pre-wrap opacity-95">
+                      {pendingUserMessage}
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-start gap-1.5">
+                    <div className="max-w-xl rounded-2xl border border-[#E5DEC9] bg-[#FCFBF7] px-4 py-3 text-xs text-slate-700 flex items-center gap-2.5">
+                      <span
+                        aria-hidden="true"
+                        className="inline-flex h-2 w-2 rounded-full bg-[#D97706] animate-pulse"
+                      />
+                      <span>
+                        Trợ lý AI đang đối chiếu căn cứ pháp lý và tổng hợp nội dung…
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div ref={chatEndRef} />
             </div>
           )}
         </div>
@@ -599,6 +703,12 @@ export default function Module01AssistantRoute({
           </p>
         </div>
       </Card>
+
+      <DirectDocumentViewerDialog
+        open={Boolean(viewerTarget)}
+        onOpenChange={(open) => !open && setViewerTarget(null)}
+        target={viewerTarget}
+      />
     </div>
   );
 }

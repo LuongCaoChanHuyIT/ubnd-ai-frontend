@@ -13,11 +13,14 @@ export const DEFAULT_ACTOR_EMAIL = "tsh.co@tshorg.vn";
 export const DEFAULT_TENANT_SLUG = "default";
 export const ACTOR_COOKIE_NAME = "ubnd_actor_email";
 export const TENANT_COOKIE_NAME = "ubnd_tenant_slug";
+export const AUTH_TOKEN_COOKIE_NAME = "ubnd_auth_token";
 
-const COOKIE_ATTRS = "path=/; max-age=2592000; SameSite=Lax";
+const COOKIE_ATTRS = "path=/; max-age=604800; SameSite=Lax";
+const CLEAR_COOKIE_ATTRS = "path=/; max-age=0; SameSite=Lax";
 const SESSION_KEY_PREFIX = "ubnd_ai_session_id";
 const ACTOR_KEY = "ubnd_ai_actor_email";
 const TENANT_KEY = "ubnd_ai_tenant_slug";
+const AUTH_TOKEN_KEY = "ubnd_ai_auth_token";
 const M01_MODE_KEY = "ubnd_ai_m01_mode";
 
 function generateId(): string {
@@ -51,16 +54,25 @@ export function parseCookieMap(
 export function parseServerCookies(cookieHeader: string | null | undefined): {
   actorEmail: string;
   tenantSlug: string;
+  authToken: string;
 } {
   const map = parseCookieMap(cookieHeader);
-  const actorEmail = (map[ACTOR_COOKIE_NAME] ?? "").trim().toLowerCase() || DEFAULT_ACTOR_EMAIL;
-  const tenantSlug = (map[TENANT_COOKIE_NAME] ?? "").trim().toLowerCase() || DEFAULT_TENANT_SLUG;
-  return { actorEmail, tenantSlug };
+  const actorEmail =
+    (map[ACTOR_COOKIE_NAME] ?? "").trim().toLowerCase() || DEFAULT_ACTOR_EMAIL;
+  const tenantSlug =
+    (map[TENANT_COOKIE_NAME] ?? "").trim().toLowerCase() || DEFAULT_TENANT_SLUG;
+  const authToken = (map[AUTH_TOKEN_COOKIE_NAME] ?? "").trim();
+  return { actorEmail, tenantSlug, authToken };
 }
 
 function writeBrowserCookie(name: string, value: string): void {
   if (typeof document === "undefined") return;
   document.cookie = `${name}=${encodeURIComponent(value)}; ${COOKIE_ATTRS}`;
+}
+
+function clearBrowserCookie(name: string): void {
+  if (typeof document === "undefined") return;
+  document.cookie = `${name}=; ${CLEAR_COOKIE_ATTRS}`;
 }
 
 export function buildScopedSessionKey(
@@ -114,6 +126,60 @@ export function createMemorySessionManager(
 }
 
 const fallbackMgr = createMemorySessionManager();
+let memoryAuthToken = "";
+
+export function getActiveAuthToken(): string {
+  if (typeof window === "undefined") {
+    return memoryAuthToken;
+  }
+  const cookieMap =
+    typeof document !== "undefined" ? parseCookieMap(document.cookie) : {};
+  const cookieTok = (cookieMap[AUTH_TOKEN_COOKIE_NAME] ?? "").trim();
+  const storedTok = (window.localStorage.getItem(AUTH_TOKEN_KEY) ?? "").trim();
+  const resolved = cookieTok || storedTok;
+  if (resolved && cookieTok !== resolved) {
+    writeBrowserCookie(AUTH_TOKEN_COOKIE_NAME, resolved);
+  }
+  if (resolved && storedTok !== resolved) {
+    window.localStorage.setItem(AUTH_TOKEN_KEY, resolved);
+  }
+  return resolved;
+}
+
+export function setAuthSession(params: {
+  token: string;
+  actorEmail: string;
+  tenantSlug: string;
+}): void {
+  const cleanToken = params.token.trim();
+  const cleanEmail = params.actorEmail.trim().toLowerCase() || DEFAULT_ACTOR_EMAIL;
+  const cleanTenant = params.tenantSlug.trim().toLowerCase() || DEFAULT_TENANT_SLUG;
+
+  if (typeof window === "undefined") {
+    memoryAuthToken = cleanToken;
+    fallbackMgr.setActiveActorEmail(cleanEmail);
+    fallbackMgr.setActiveTenantSlug(cleanTenant);
+    return;
+  }
+
+  window.localStorage.setItem(AUTH_TOKEN_KEY, cleanToken);
+  window.localStorage.setItem(ACTOR_KEY, cleanEmail);
+  window.localStorage.setItem(TENANT_KEY, cleanTenant);
+  writeBrowserCookie(AUTH_TOKEN_COOKIE_NAME, cleanToken);
+  writeBrowserCookie(ACTOR_COOKIE_NAME, cleanEmail);
+  writeBrowserCookie(TENANT_COOKIE_NAME, cleanTenant);
+  window.dispatchEvent(new CustomEvent("ubnd-actor-changed", { detail: cleanEmail }));
+  window.dispatchEvent(new CustomEvent("ubnd-tenant-changed", { detail: cleanTenant }));
+}
+
+export function clearAuthSession(): void {
+  memoryAuthToken = "";
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.removeItem(AUTH_TOKEN_KEY);
+  clearBrowserCookie(AUTH_TOKEN_COOKIE_NAME);
+}
 
 export function ensureBrowserIdentityCookies(): {
   actorEmail: string;

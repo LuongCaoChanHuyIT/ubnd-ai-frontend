@@ -2,8 +2,10 @@ import { resolveServerApiBase } from "../lib/api.ts";
 
 const FORWARDED_REQUEST_HEADERS = [
   "accept",
+  "authorization",
   "content-type",
   "cookie",
+  "x-auth-token",
   "x-actor-email",
   "x-tenant-slug",
   "cf-access-authenticated-user-email",
@@ -52,6 +54,14 @@ export async function proxyApiRequest(request: Request): Promise<Response> {
     const contentType = upstream.headers.get("content-type");
     if (contentType) {
       responseHeaders.set("content-type", contentType);
+    }
+    const contentDisposition = upstream.headers.get("content-disposition");
+    if (contentDisposition) {
+      responseHeaders.set("content-disposition", contentDisposition);
+    }
+    const setCookie = upstream.headers.get("set-cookie");
+    if (setCookie) {
+      responseHeaders.set("set-cookie", setCookie);
     }
 
     return new Response(upstream.body, {

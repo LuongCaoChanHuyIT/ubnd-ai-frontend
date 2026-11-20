@@ -44,6 +44,37 @@ export function canAccessM07Admin(role: "owner" | "officer"): boolean {
   return role === "owner";
 }
 
+export function canManageOfficialDocs(
+  user:
+    | { role: "owner" | "officer"; can_manage_docs?: boolean }
+    | null
+    | undefined,
+): boolean {
+  if (!user) return false;
+  return user.role === "owner" || Boolean(user.can_manage_docs);
+}
+
+export function canApproveDocRequests(
+  user:
+    | { role: "owner" | "officer"; can_approve_doc_requests?: boolean }
+    | null
+    | undefined,
+): boolean {
+  if (!user) return false;
+  return user.role === "owner" || Boolean(user.can_approve_doc_requests);
+}
+
+export function canManageDepartmentTasks(
+  user:
+    | { role: "owner" | "officer"; can_manage_tasks?: boolean }
+    | null
+    | undefined,
+): boolean {
+  if (!user) return false;
+  if (user.role === "owner") return true;
+  return user.can_manage_tasks !== false;
+}
+
 export function resolveEffectiveDepartmentForUser(
   requestedDept: DepartmentId,
   user: { role: "owner" | "officer"; department_id: DepartmentId },

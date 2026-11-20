@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useDeferredValue, useEffect, useState } from "react";
 import {
   Link,
   useOutletContext,
@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   Copy,
   Database,
+  ExternalLink,
   History,
   KeyRound,
   Lock,
@@ -20,8 +21,10 @@ import {
   RefreshCw,
   RotateCcw,
   Save,
+  Search,
   ShieldCheck,
   SlidersHorizontal,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import type { Route } from "./+types/m07-admin";
@@ -29,11 +32,14 @@ import {
   ApiError,
   apiRequest,
   extractServerAuthHeaders,
+  GEMINI_MODEL_PRESETS,
   normalizeDepartmentId,
+  probeApiConnector,
   resolveServerApiBase,
   type ApiConnector,
   type AuditLogEntry,
   type ClonedTenant,
+  type ConnectorProbeResponse,
   type Department,
   type DepartmentId,
   type RbacUser,
@@ -44,6 +50,15 @@ import {
   normalizeAdminTab,
   type AdminTabId,
 } from "~/lib/m06-m07-helpers";
+import { matchesVietnameseQuery } from "~/lib/vietnamese-search";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "~/components/ui/dialog";
 import { ModuleHeader } from "~/components/workspace/module-surface";
 import { cn } from "~/lib/utils";
 import { Alert, AlertDescription } from "~/components/ui/alert";
@@ -171,7 +186,17 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
   const [newName, setNewName] = useState("");
   const [newPosition, setNewPosition] = useState("Công chức chuyên môn");
   const [newUserDept, setNewUserDept] = useState<DepartmentId>(deptId);
+  const [newUserPassword, setNewUserPassword] = useState("");
   const [newPrivateAccess, setNewPrivateAccess] = useState(true);
+  const [newManageDocs, setNewManageDocs] = useState(false);
+  const [newApproveDocs, setNewApproveDocs] = useState(false);
+  const [newManageTasks, setNewManageTasks] = useState(true);
+  const [userSearch, setUserSearch] = useState("");
+  const [logSearch, setLogSearch] = useState("");
+  const deferredUserSearch = useDeferredValue(userSearch);
+  const deferredLogSearch = useDeferredValue(logSearch);
+  const [pwdDialogUser, setPwdDialogUser] = useState<RbacUser | null>(null);
+  const [resetPasswordVal, setResetPasswordVal] = useState("");
 
   // Instruction editor state
   const [instDeptId, setInstDeptId] = useState<DepartmentId>(deptId);
@@ -187,28 +212,44 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
     if (d) setInstText(d.instruction ?? "");
   }, [instDeptId, loaderData.departments]);
 
+  function normalizeConnectorProvider(raw: string | undefined): string {
+    const p = (raw ?? "").trim().toLowerCase();
+    if (p === "openai" || p === "openai-compatible") return "openai-compatible";
+    return "google-gemini";
+  }
+
   // API Connector state
   const firstConnector = loaderData.connectors[0];
+  const [connProvider, setConnProvider] = useState(
+    normalizeConnectorProvider(firstConnector?.provider),
+  );
   const [connName, setConnName] = useState(
-    firstConnector?.name ?? "Cổng LLM Nội bộ / OpenAI-Compatible",
+    firstConnector?.name ?? "Google Gemini 4 (Interactions API v1)",
   );
   const [connUrl, setConnUrl] = useState(
-    firstConnector?.base_url ?? "https://api.openai.com/v1",
+    firstConnector?.base_url ?? "https://generativelanguage.googleapis.com",
   );
   const [connModel, setConnModel] = useState(
-    firstConnector?.model_name ?? "gpt-4o-mini",
+    firstConnector?.model_name ?? "gemini-4-hydrogen",
   );
   const [connKey, setConnKey] = useState("");
   const [connActive, setConnActive] = useState(firstConnector?.active ?? false);
+  const [probing, setProbing] = useState(false);
+  const [probeResult, setProbeResult] = useState<ConnectorProbeResponse | null>(
+    null,
+  );
 
   useEffect(() => {
+    setConnKey("");
+    setProbeResult(null);
     if (firstConnector) {
+      setConnProvider(normalizeConnectorProvider(firstConnector.provider));
       setConnName(firstConnector.name);
       setConnUrl(firstConnector.base_url);
       setConnModel(firstConnector.model_name);
       setConnActive(firstConnector.active);
     }
-  }, [firstConnector]);
+  }, [firstConnector, activeTenantSlug]);
 
   // Clone Tenant state
   const [communeName, setCommuneName] = useState("UBND Phường Hòa Xuân");
@@ -268,10 +309,15 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
           role: "officer",
           department_id: newUserDept,
           private_repo_access: newPrivateAccess,
+          can_manage_docs: newManageDocs,
+          can_approve_doc_requests: newApproveDocs,
+          can_manage_tasks: newManageTasks,
+          password: newUserPassword.trim(),
         },
       });
       setNewEmail("");
       setNewName("");
+      setNewUserPassword("");
       setBanner({
         tone: "ok",
         text: "Đã phân quyền tài khoản cán bộ mới thành công.",
@@ -287,27 +333,43 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
     }
   }
 
-  async function handleTogglePrivateRepo(userId: number, nextAccess: boolean) {
+  async function handlePatchUserPermission(
+    userId: number,
+    patchBody: Record<string, unknown>,
+    successMsg: string,
+  ) {
     setBusy(true);
     setBanner(null);
     try {
       await apiRequest(`/api/m07/users/${userId}`, {
         method: "PATCH",
-        body: { private_repo_access: nextAccess },
+        body: patchBody,
       });
       setBanner({
         tone: "ok",
-        text: `Đã cập nhật quyền Kho dữ liệu riêng thành '${nextAccess ? "Được phép" : "Giới hạn"}'.`,
+        text: successMsg,
       });
       revalidator.revalidate();
     } catch (err) {
       setBanner({
         tone: "err",
-        text: err instanceof Error ? err.message : "Không thể cập nhật quyền Kho riêng",
+        text: err instanceof Error ? err.message : "Không thể cập nhật phân quyền",
       });
     } finally {
       setBusy(false);
     }
+  }
+
+  async function handleResetUserPassword(ev: React.FormEvent) {
+    ev.preventDefault();
+    if (!pwdDialogUser || resetPasswordVal.trim().length < 6) return;
+    await handlePatchUserPermission(
+      pwdDialogUser.id,
+      { new_password: resetPasswordVal.trim() },
+      `Đã đặt lại mật khẩu cho tài khoản ${pwdDialogUser.email}.`,
+    );
+    setPwdDialogUser(null);
+    setResetPasswordVal("");
   }
 
   async function handleDeleteUser(userId: number) {
@@ -353,6 +415,22 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
     }
   }
 
+  function handleProviderChange(nextProvider: string) {
+    setConnProvider(nextProvider);
+    setProbeResult(null);
+    if (nextProvider === "google-gemini") {
+      setConnName("Google Gemini 4 (Interactions API v1)");
+      setConnUrl("https://generativelanguage.googleapis.com");
+      if (!GEMINI_MODEL_PRESETS.some((p) => p.id === connModel)) {
+        setConnModel("gemini-4-hydrogen");
+      }
+    } else if (connUrl.includes("generativelanguage.googleapis.com")) {
+      setConnName("Cổng LLM Nội bộ / OpenAI-Compatible");
+      setConnUrl("https://api.openai.com/v1");
+      setConnModel("gpt-4o-mini");
+    }
+  }
+
   async function handleSaveConnector(ev: React.FormEvent) {
     ev.preventDefault();
     if (!firstConnector) return;
@@ -363,7 +441,7 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
         method: "PUT",
         body: {
           name: connName,
-          provider: "openai-compatible",
+          provider: connProvider,
           base_url: connUrl,
           model_name: connModel,
           api_key: connKey.trim() || null,
@@ -383,6 +461,30 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
       });
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleProbeConnector() {
+    if (!firstConnector) return;
+    setProbing(true);
+    setProbeResult(null);
+    setBanner(null);
+    try {
+      const res = await probeApiConnector(firstConnector.id, {
+        provider: connProvider,
+        base_url: connUrl,
+        model_name: connModel,
+        api_key: connKey.trim() || null,
+      });
+      setProbeResult(res);
+    } catch (err) {
+      setBanner({
+        tone: "err",
+        text:
+          err instanceof Error ? err.message : "Không thể kiểm tra kết nối AI",
+      });
+    } finally {
+      setProbing(false);
     }
   }
 
@@ -618,15 +720,67 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex items-center justify-between rounded-lg border border-slate-200 p-2.5 text-xs gap-2">
-                  <span id="m07-private-repo-label">
-                    Quyền khai thác Kho dữ liệu riêng
-                  </span>
-                  <Switch
-                    aria-labelledby="m07-private-repo-label"
-                    checked={newPrivateAccess}
-                    onCheckedChange={setNewPrivateAccess}
+                <div className="space-y-1">
+                  <label
+                    htmlFor="m07-user-password"
+                    className="block text-xs font-semibold text-slate-700"
+                  >
+                    Mật khẩu khởi tạo (để trống dùng mật khẩu mẫu)
+                  </label>
+                  <Input
+                    id="m07-user-password"
+                    type="password"
+                    value={newUserPassword}
+                    onChange={(e) => setNewUserPassword(e.target.value)}
+                    placeholder="Tối thiểu 6 ký tự…"
+                    spellCheck={false}
+                    autoComplete="new-password"
                   />
+                </div>
+                <div className="space-y-2 rounded-lg border border-slate-200 p-2.5 text-xs">
+                  <p className="font-semibold text-slate-800">
+                    Phân quyền chức năng chi tiết
+                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <span id="m07-manage-docs-label">
+                      Quản lý Kho văn bản chính thức
+                    </span>
+                    <Switch
+                      aria-labelledby="m07-manage-docs-label"
+                      checked={newManageDocs}
+                      onCheckedChange={setNewManageDocs}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span id="m07-approve-docs-label">
+                      Phê duyệt đề nghị cập nhật VB
+                    </span>
+                    <Switch
+                      aria-labelledby="m07-approve-docs-label"
+                      checked={newApproveDocs}
+                      onCheckedChange={setNewApproveDocs}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span id="m07-manage-tasks-label">
+                      Giao việc & đôn đốc nhiệm vụ
+                    </span>
+                    <Switch
+                      aria-labelledby="m07-manage-tasks-label"
+                      checked={newManageTasks}
+                      onCheckedChange={setNewManageTasks}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span id="m07-private-repo-label">
+                      Khai thác Kho dữ liệu riêng phòng
+                    </span>
+                    <Switch
+                      aria-labelledby="m07-private-repo-label"
+                      checked={newPrivateAccess}
+                      onCheckedChange={setNewPrivateAccess}
+                    />
+                  </div>
                 </div>
                 <Button
                   type="submit"
@@ -641,10 +795,28 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
           </Card>
 
           <Card className="lg:col-span-8 border-slate-200 shadow-2xs">
-            <CardHeader>
-              <CardTitle className="text-base tabular-nums">
-                Danh sách tài khoản & Phạm vi phân quyền ({loaderData.users.length})
-              </CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
+              <div>
+                <CardTitle className="text-base tabular-nums">
+                  Danh sách tài khoản & Ma trận phân quyền ({loaderData.users.length})
+                </CardTitle>
+                <CardDescription className="text-xs mt-0.5">
+                  Bấm trực tiếp lên từng nhãn chức năng để bật/tắt quyền riêng cho công chức.
+                </CardDescription>
+              </div>
+              <div className="relative w-full sm:w-60">
+                <Search
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400"
+                />
+                <Input
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                  placeholder="Tìm cán bộ (không dấu)…"
+                  aria-label="Tìm kiếm tài khoản cán bộ có dấu hoặc không dấu"
+                  className="h-8 pl-8 text-xs"
+                />
+              </div>
             </CardHeader>
             <CardContent>
               <div className="rounded-lg border border-slate-200 overflow-x-auto">
@@ -652,82 +824,230 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
                   <TableHeader>
                     <TableRow className="bg-slate-50">
                       <TableHead>Email & Họ tên</TableHead>
-                      <TableHead className="w-[95px]">Phòng</TableHead>
-                      <TableHead className="w-[100px]">Kho riêng</TableHead>
-                      <TableHead className="w-[105px]">Vai trò</TableHead>
-                      <TableHead className="w-[80px] text-right">Thao tác</TableHead>
+                      <TableHead className="w-[75px]">Phòng</TableHead>
+                      <TableHead>Quyền chức năng (Bấm để bật/tắt)</TableHead>
+                      <TableHead className="w-[95px]">Trạng thái</TableHead>
+                      <TableHead className="w-[115px] text-right">Thao tác</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {loaderData.users.map((u) => (
-                      <TableRow key={u.id}>
-                        <TableCell className="text-xs whitespace-normal min-w-[200px]">
-                          <p className="font-semibold text-slate-900">{u.email}</p>
-                          <p className="text-slate-600">
-                            {u.full_name} · {u.position}
-                          </p>
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap">
-                          <Badge variant="secondary" className="text-xs">
-                            {u.department_id}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">
-                          {u.role === "owner" ? (
-                            <span className="font-medium text-emerald-700">Toàn quyền</span>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() =>
-                                void handleTogglePrivateRepo(u.id, !u.private_repo_access)
-                              }
-                              title="Bấm để bật/tắt quyền truy cập Kho dữ liệu riêng của phòng"
-                              className={cn(
-                                "inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors",
-                                u.private_repo_access
-                                  ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-                                  : "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100",
+                    {loaderData.users
+                      .filter((u) =>
+                        matchesVietnameseQuery(
+                          `${u.email} ${u.full_name} ${u.position} ${u.department_id}`,
+                          deferredUserSearch,
+                        ),
+                      )
+                      .map((u) => {
+                        const isSelfRow =
+                          u.email.toLowerCase() ===
+                          (outlet?.currentUser?.email ?? "").toLowerCase();
+                        return (
+                          <TableRow key={u.id}>
+                            <TableCell className="text-xs whitespace-normal min-w-[185px] align-top">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className="font-semibold text-slate-900" translate="no">
+                                  {u.email}
+                                </p>
+                                <Badge
+                                  className={
+                                    u.role === "owner"
+                                      ? "bg-[#0C1E35] text-white text-[10px]"
+                                      : "bg-slate-200 text-slate-800 text-[10px]"
+                                  }
+                                >
+                                  {u.role === "owner" ? "Chủ sở hữu" : "Cán bộ"}
+                                </Badge>
+                              </div>
+                              <p className="text-slate-600 mt-0.5">
+                                {u.full_name} · {u.position}
+                              </p>
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap align-top">
+                              <Badge variant="secondary" className="text-xs">
+                                {u.department_id}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-xs whitespace-normal min-w-[235px] align-top">
+                              {u.role === "owner" ? (
+                                <span className="font-medium text-emerald-700">
+                                  Toàn quyền hệ thống (Owner)
+                                </span>
+                              ) : (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {(
+                                    [
+                                      {
+                                        key: "can_manage_docs",
+                                        label: "Kho VB chính thức",
+                                        on: Boolean(u.can_manage_docs),
+                                      },
+                                      {
+                                        key: "can_approve_doc_requests",
+                                        label: "Duyệt đề nghị VB",
+                                        on: Boolean(u.can_approve_doc_requests),
+                                      },
+                                      {
+                                        key: "can_manage_tasks",
+                                        label: "Giao việc",
+                                        on: u.can_manage_tasks !== false,
+                                      },
+                                      {
+                                        key: "private_repo_access",
+                                        label: "Kho riêng",
+                                        on: Boolean(u.private_repo_access),
+                                      },
+                                    ] as const
+                                  ).map((perm) => (
+                                    <button
+                                      key={perm.key}
+                                      type="button"
+                                      disabled={busy}
+                                      onClick={() =>
+                                        void handlePatchUserPermission(
+                                          u.id,
+                                          { [perm.key]: !perm.on },
+                                          `Đã ${!perm.on ? "cấp" : "thu hồi"} quyền '${perm.label}' cho ${u.email}.`,
+                                        )
+                                      }
+                                      className={cn(
+                                        "inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors",
+                                        perm.on
+                                          ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                                          : "border-slate-300 bg-slate-100 text-slate-600 hover:bg-slate-200",
+                                      )}
+                                    >
+                                      {perm.on ? "✓ " : "✕ "}
+                                      {perm.label}
+                                    </button>
+                                  ))}
+                                </div>
                               )}
-                            >
-                              {u.private_repo_access ? "Được phép" : "Giới hạn"}
-                            </button>
-                          )}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap">
-                          <Badge
-                            className={
-                              u.role === "owner"
-                                ? "bg-[#0C1E35] text-white text-[10px]"
-                                : "bg-slate-200 text-slate-800 text-[10px]"
-                            }
-                          >
-                            {u.role === "owner" ? "Chủ sở hữu" : "Cán bộ"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right whitespace-nowrap">
-                          {u.role !== "owner" && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              disabled={busy}
-                              aria-label={`Thu hồi tài khoản ${u.email}`}
-                              title={`Thu hồi tài khoản ${u.email}`}
-                              onClick={() => void handleDeleteUser(u.id)}
-                              className="h-7 px-2 text-rose-600 hover:text-rose-700"
-                            >
-                              <Trash2 aria-hidden="true" className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap align-top">
+                              <button
+                                type="button"
+                                disabled={busy || isSelfRow}
+                                onClick={() =>
+                                  void handlePatchUserPermission(
+                                    u.id,
+                                    { active: !u.active },
+                                    `Đã ${!u.active ? "mở khóa" : "tạm khóa"} tài khoản ${u.email}.`,
+                                  )
+                                }
+                                title={
+                                  isSelfRow
+                                    ? "Không thể tự khóa tài khoản đang đăng nhập"
+                                    : "Bấm để khóa hoặc mở khóa đăng nhập"
+                                }
+                                className={cn(
+                                  "inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors disabled:opacity-60",
+                                  u.active
+                                    ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                                    : "border-rose-300 bg-rose-50 text-rose-800",
+                                )}
+                              >
+                                {u.active ? "Hoạt động" : "Tạm khóa"}
+                              </button>
+                            </TableCell>
+                            <TableCell className="text-right whitespace-nowrap align-top">
+                              <div className="inline-flex items-center gap-1">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={busy}
+                                  aria-label={`Đặt lại mật khẩu ${u.email}`}
+                                  title={`Đặt lại mật khẩu ${u.email}`}
+                                  onClick={() => {
+                                    setPwdDialogUser(u);
+                                    setResetPasswordVal("");
+                                  }}
+                                  className="h-7 px-2 text-slate-700 hover:text-[#1B4D89]"
+                                >
+                                  <KeyRound aria-hidden="true" className="h-3.5 w-3.5" />
+                                </Button>
+                                {!isSelfRow && u.role !== "owner" && (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={busy}
+                                    aria-label={`Thu hồi tài khoản ${u.email}`}
+                                    title={`Thu hồi tài khoản ${u.email}`}
+                                    onClick={() => void handleDeleteUser(u.id)}
+                                    className="h-7 px-2 text-rose-600 hover:text-rose-700"
+                                  >
+                                    <Trash2 aria-hidden="true" className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                   </TableBody>
                 </Table>
               </div>
             </CardContent>
           </Card>
+
+          <Dialog
+            open={pwdDialogUser !== null}
+            onOpenChange={(open) => {
+              if (!open) {
+                setPwdDialogUser(null);
+                setResetPasswordVal("");
+              }
+            }}
+          >
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Đặt lại mật khẩu đăng nhập</DialogTitle>
+                <DialogDescription>
+                  Cấp mật khẩu mới cho tài khoản{" "}
+                  <strong>{pwdDialogUser?.email}</strong>.
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleResetUserPassword} className="space-y-3">
+                <div className="space-y-1">
+                  <label
+                    htmlFor="m07-reset-pwd-input"
+                    className="block text-xs font-semibold text-slate-700"
+                  >
+                    Mật khẩu mới (tối thiểu 6 ký tự)
+                  </label>
+                  <Input
+                    id="m07-reset-pwd-input"
+                    type="password"
+                    value={resetPasswordVal}
+                    onChange={(e) => setResetPasswordVal(e.target.value)}
+                    placeholder="Nhập mật khẩu mới…"
+                    spellCheck={false}
+                    autoComplete="new-password"
+                    minLength={6}
+                    required
+                  />
+                </div>
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setPwdDialogUser(null)}
+                  >
+                    Hủy
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={busy || resetPasswordVal.trim().length < 6}
+                    className="bg-[#1B4D89] hover:bg-[#163E70] text-white"
+                  >
+                    Lưu mật khẩu mới
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         {/* Tab 2: Instruction của phòng */}
@@ -800,39 +1120,129 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
 
         {/* Tab 3: Cổng API đấu nối */}
         <TabsContent value="api" className="pt-3">
-          <Card className="border-slate-200 shadow-2xs max-w-2xl">
+          <Card className="border-slate-200 shadow-2xs max-w-3xl">
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-1.5">
                 <KeyRound aria-hidden="true" className="h-4 w-4 text-[#1B4D89]" />
-                Cổng API đấu nối mô hình ngôn ngữ (LLM Gateway)
+                Cổng API đấu nối mô hình ngôn ngữ (Google Gemini 4 &amp; LLM Gateway)
               </CardTitle>
-              <CardDescription className="text-xs">
-                Khóa bí mật API luôn được che dạng <code>***</code> khi hiển thị trên
-                giao diện quản trị.
+              <CardDescription className="text-xs leading-relaxed">
+                Tích hợp trực tiếp dòng mô hình <strong>Google Gemini 4</strong>{" "}
+                qua chuẩn <code>Interactions API v1</code> với chế độ bảo mật không
+                lưu trữ dữ liệu công vụ (<code>store=False</code>) và tự động chuyển
+                tầng thông minh khi vượt hạn mức.
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSaveConnector} className="space-y-3.5">
-                <div className="space-y-1">
-                  <label
-                    htmlFor="m07-conn-name"
-                    className="block text-xs font-semibold text-slate-700"
+            <CardContent className="space-y-4">
+              <div className="rounded-lg border border-[#1B4D89]/25 bg-[#EEF4FB]/70 p-3.5 text-xs text-slate-800 space-y-1.5">
+                <p className="font-semibold text-[#0C1E35] flex items-center gap-1.5">
+                  <Sparkles aria-hidden="true" className="h-3.5 w-3.5 text-[#1B4D89]" />
+                  Hướng dẫn kết nối an toàn bằng tài khoản Google / Gemini cá nhân
+                </p>
+                <p className="leading-relaxed text-slate-700">
+                  Hệ thống tuyệt đối <strong>không yêu cầu và không lưu mật khẩu Gmail</strong>.
+                  Để sử dụng tài khoản Google của anh/chị, hãy mở Google AI Studio tạo
+                  khóa <code>GEMINI_API_KEY</code> (dạng <code>AIzaSy…</code>), dán vào
+                  ô bên dưới, bật công tắc kích hoạt và bấm{" "}
+                  <strong>Kiểm tra kết nối AI</strong>.
+                </p>
+                <div className="pt-0.5">
+                  <a
+                    href="https://aistudio.google.com/apikey"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 font-semibold text-[#1B4D89] hover:underline"
                   >
-                    Tên cổng kết nối
-                  </label>
-                  <Input
-                    id="m07-conn-name"
-                    value={connName}
-                    onChange={(e) => setConnName(e.target.value)}
-                  />
+                    Lấy khóa GEMINI_API_KEY chính thức tại Google AI Studio
+                    <ExternalLink aria-hidden="true" className="h-3 w-3" />
+                  </a>
                 </div>
+              </div>
+
+              <form onSubmit={handleSaveConnector} className="space-y-3.5">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1 min-w-0">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Nhà cung cấp AI (Provider)
+                    </label>
+                    <Select
+                      value={connProvider}
+                      onValueChange={handleProviderChange}
+                    >
+                      <SelectTrigger
+                        aria-label="Chọn nhà cung cấp mô hình AI"
+                        className="w-full min-w-0"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="google-gemini">
+                          Google Gemini 4 (Interactions API v1 — Khuyến nghị)
+                        </SelectItem>
+                        <SelectItem value="openai-compatible">
+                          OpenAI-Compatible / Cổng nội bộ
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1 min-w-0">
+                    <label
+                      htmlFor="m07-conn-name"
+                      className="block text-xs font-semibold text-slate-700"
+                    >
+                      Tên hiển thị cổng kết nối
+                    </label>
+                    <Input
+                      id="m07-conn-name"
+                      value={connName}
+                      onChange={(e) => setConnName(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1 min-w-0">
+                    <label
+                      htmlFor="m07-conn-model"
+                      className="block text-xs font-semibold text-slate-700"
+                    >
+                      Mô hình ngôn ngữ (Model)
+                    </label>
+                    {connProvider === "google-gemini" ? (
+                      <Select value={connModel} onValueChange={setConnModel}>
+                        <SelectTrigger
+                          id="m07-conn-model"
+                          aria-label="Chọn thế hệ mô hình Google Gemini 4"
+                          className="w-full min-w-0"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {GEMINI_MODEL_PRESETS.map((preset) => (
+                            <SelectItem key={preset.id} value={preset.id}>
+                              {preset.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        id="m07-conn-model"
+                        value={connModel}
+                        onChange={(e) => setConnModel(e.target.value)}
+                        spellCheck={false}
+                        autoComplete="off"
+                      />
+                    )}
+                  </div>
+
                   <div className="space-y-1 min-w-0">
                     <label
                       htmlFor="m07-conn-url"
                       className="block text-xs font-semibold text-slate-700"
                     >
-                      Base URL (OpenAI-compatible)
+                      Địa chỉ máy chủ API (Base URL)
                     </label>
                     <Input
                       id="m07-conn-url"
@@ -842,28 +1252,22 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
                       autoComplete="off"
                     />
                   </div>
-                  <div className="space-y-1 min-w-0">
-                    <label
-                      htmlFor="m07-conn-model"
-                      className="block text-xs font-semibold text-slate-700"
-                    >
-                      Model Name
-                    </label>
-                    <Input
-                      id="m07-conn-model"
-                      value={connModel}
-                      onChange={(e) => setConnModel(e.target.value)}
-                      spellCheck={false}
-                      autoComplete="off"
-                    />
-                  </div>
                 </div>
+
+                {connProvider === "google-gemini" && (
+                  <p className="text-[11px] text-slate-600 leading-relaxed">
+                    {GEMINI_MODEL_PRESETS.find((p) => p.id === connModel)
+                      ?.description ??
+                      "Tự động chuyển tầng dự phòng Carbon → Argon → Hydrogen → 3.5 Flash-Lite khi gặp giới hạn hạn mức."}
+                  </p>
+                )}
+
                 <div className="space-y-1">
                   <label
                     htmlFor="m07-conn-key"
                     className="text-xs font-semibold text-slate-700 flex items-center justify-between flex-wrap gap-1"
                   >
-                    <span>API Secret Key (chỉ nhập khi muốn thay đổi)</span>
+                    <span>API Secret Key (chỉ nhập khi muốn cấp mới hoặc thay đổi)</span>
                     <Badge variant="outline" className="font-mono text-[11px]">
                       Hiện tại:{" "}
                       {firstConnector?.api_key_masked || "Chưa thiết lập khóa"}
@@ -874,7 +1278,9 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
                     type="password"
                     value={connKey}
                     onChange={(e) => setConnKey(e.target.value)}
-                    placeholder="sk-…"
+                    placeholder={
+                      connProvider === "google-gemini" ? "AIzaSy…" : "sk-…"
+                    }
                     spellCheck={false}
                     autoComplete="off"
                   />
@@ -882,10 +1288,10 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
                 <div className="flex items-center justify-between rounded-lg border border-slate-200 p-3 text-xs gap-3">
                   <div id="m07-conn-active-label">
                     <p className="font-semibold text-slate-900">
-                      Kích hoạt gọi LLM trực tiếp
+                      Kích hoạt tổng hợp thông minh bằng LLM trực tiếp (M01, M02, M03, M05)
                     </p>
                     <p className="text-slate-600">
-                      Khi tắt, hệ thống sử dụng bộ tổng hợp hành chính chuẩn nội bộ.
+                      Khi tắt hoặc chưa có khóa, hệ thống tự động dùng bộ quy tắc hành chính chuẩn nội bộ.
                     </p>
                   </div>
                   <Switch
@@ -894,15 +1300,72 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
                     onCheckedChange={setConnActive}
                   />
                 </div>
-                <Button
-                  type="submit"
-                  disabled={busy}
-                  className="bg-[#1B4D89] hover:bg-[#163E70] text-white gap-1.5"
-                >
-                  <Save aria-hidden="true" className="h-4 w-4" />
-                  Lưu cấu hình Cổng API
-                </Button>
+
+                <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                  <Button
+                    type="submit"
+                    disabled={busy || probing}
+                    className="bg-[#1B4D89] hover:bg-[#163E70] text-white gap-1.5"
+                  >
+                    <Save aria-hidden="true" className="h-4 w-4" />
+                    Lưu cấu hình Cổng API
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={busy || probing || !firstConnector}
+                    onClick={() => void handleProbeConnector()}
+                    className="border-[#1B4D89]/30 text-[#1B4D89] hover:bg-[#EEF4FB] gap-1.5"
+                  >
+                    <RefreshCw
+                      aria-hidden="true"
+                      className={cn("h-4 w-4", probing && "animate-spin")}
+                    />
+                    {probing ? "Đang kiểm tra…" : "Kiểm tra kết nối AI"}
+                  </Button>
+                </div>
               </form>
+
+              {probeResult && (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className={cn(
+                    "rounded-lg border p-3.5 text-xs space-y-1.5",
+                    probeResult.ok
+                      ? "border-emerald-200 bg-emerald-50/90 text-emerald-950"
+                      : "border-rose-200 bg-rose-50/90 text-rose-950",
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="font-semibold flex items-center gap-1.5">
+                      {probeResult.ok ? (
+                        <CheckCircle2
+                          aria-hidden="true"
+                          className="h-4 w-4 text-emerald-700"
+                        />
+                      ) : (
+                        <AlertTriangle
+                          aria-hidden="true"
+                          className="h-4 w-4 text-rose-700"
+                        />
+                      )}
+                      {probeResult.detail}
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className="font-mono text-[11px] bg-white/80 tabular-nums"
+                    >
+                      {probeResult.resolved_model} · {probeResult.latency_ms} ms
+                    </Badge>
+                  </div>
+                  {probeResult.sample_reply && (
+                    <p className="text-slate-700 bg-white/80 rounded border border-emerald-200/70 px-2.5 py-1.5 italic">
+                      “{probeResult.sample_reply}”
+                    </p>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -921,16 +1384,31 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
                   mà không lưu trữ nội dung tài liệu tạm của phiên.
                 </CardDescription>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => revalidator.revalidate()}
-                className="gap-1.5 text-xs whitespace-nowrap"
-              >
-                <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />
-                Làm mới
-              </Button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="relative w-56">
+                  <Search
+                    aria-hidden="true"
+                    className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400"
+                  />
+                  <Input
+                    value={logSearch}
+                    onChange={(e) => setLogSearch(e.target.value)}
+                    placeholder="Lọc nhật ký (không dấu)…"
+                    aria-label="Lọc nhật ký hệ thống có dấu hoặc không dấu"
+                    className="h-8 pl-8 text-xs"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => revalidator.revalidate()}
+                  className="gap-1.5 text-xs whitespace-nowrap"
+                >
+                  <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />
+                  Làm mới
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="rounded-lg border border-slate-200 overflow-x-auto">
@@ -945,8 +1423,15 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {loaderData.logs.map((log) => (
-                      <TableRow key={log.id} className="text-xs">
+                    {loaderData.logs
+                      .filter((log) =>
+                        matchesVietnameseQuery(
+                          `${log.actor_email} ${log.module_code} ${log.department_id} ${log.action} ${log.detail}`,
+                          deferredLogSearch,
+                        ),
+                      )
+                      .map((log) => (
+                      <TableRow key={log.id} className="text-xs cv-auto">
                         <TableCell className="text-slate-600 font-mono text-[11px] whitespace-nowrap align-top tabular-nums">
                           {log.created_at.slice(0, 19).replace("T", " ")}
                         </TableCell>

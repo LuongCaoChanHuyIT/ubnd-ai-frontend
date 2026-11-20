@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useDeferredValue, useEffect, useState } from "react";
 import {
   useOutletContext,
   useRevalidator,
@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Lock,
   Plus,
+  Search,
 } from "lucide-react";
 import type { Route } from "./+types/m06-tasks";
 import {
@@ -23,10 +24,12 @@ import {
   type WorkspaceOutletContext,
 } from "~/lib/api";
 import {
+  canManageDepartmentTasks,
   formatPriorityLabel,
   formatTaskStatusLabel,
   resolveDefaultM06FilterDept,
 } from "~/lib/m06-m07-helpers";
+import { matchesVietnameseQuery } from "~/lib/vietnamese-search";
 import {
   MetricStrip,
   ModuleHeader,
@@ -106,11 +109,15 @@ export default function Module06TasksRoute({ loaderData }: Route.ComponentProps)
     searchParams.get("dept") ?? loaderData.deptId,
   );
   const isOwner = (outlet?.currentUser?.role ?? "owner") === "owner";
+  const canAssignTasks = canManageDepartmentTasks(
+    outlet?.currentUser ?? { role: "owner", can_manage_tasks: true },
+  );
   const deptId = isOwner
     ? rawDept
     : (outlet?.currentUser?.department_id ?? rawDept);
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [taskDept, setTaskDept] = useState<DepartmentId>(deptId);
@@ -139,7 +146,9 @@ export default function Module06TasksRoute({ loaderData }: Route.ComponentProps)
       if (incomingDesc) setDescription(incomingDesc);
       if (incomingRef) setRefDoc(incomingRef);
       setTaskDept(deptId);
-      setCreateOpen(true);
+      if (canAssignTasks) {
+        setCreateOpen(true);
+      }
 
       const cleaned = new URLSearchParams(searchParams);
       cleaned.delete("newTask");
@@ -148,7 +157,7 @@ export default function Module06TasksRoute({ loaderData }: Route.ComponentProps)
       cleaned.delete("ref");
       setSearchParams(cleaned, { replace: true });
     }
-  }, [deptId, searchParams, setSearchParams]);
+  }, [canAssignTasks, deptId, searchParams, setSearchParams]);
 
   function setDeptFilter(nextFilter: DepartmentId | "ALL") {
     if (!isOwner) return;
@@ -229,6 +238,13 @@ export default function Module06TasksRoute({ loaderData }: Route.ComponentProps)
 
   const { kpis, tasks } = loaderData.overview;
   const activeFilter = isOwner ? loaderData.filterDept : deptId;
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+  const filteredTasks = tasks.filter((t) =>
+    matchesVietnameseQuery(
+      `${t.title} ${t.description} ${t.assignee} ${t.ref_doc_number} ${t.department_id}`,
+      deferredSearchQuery,
+    ),
+  );
 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
@@ -248,6 +264,7 @@ export default function Module06TasksRoute({ loaderData }: Route.ComponentProps)
         </ModuleHeader.Content>
 
         <ModuleHeader.Actions>
+          {canAssignTasks ? (
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogTrigger asChild>
               <Button className="bg-[#1B4D89] hover:bg-[#163E70] text-white gap-1.5">
@@ -413,6 +430,15 @@ export default function Module06TasksRoute({ loaderData }: Route.ComponentProps)
               </form>
             </DialogContent>
           </Dialog>
+          ) : (
+            <Badge
+              variant="outline"
+              className="border-amber-300 bg-amber-50 text-amber-900 text-xs py-1.5 px-3"
+            >
+              <Lock aria-hidden="true" className="h-3.5 w-3.5 mr-1.5" />
+              Chế độ thực thi · Chỉ cập nhật tiến độ
+            </Badge>
+          )}
         </ModuleHeader.Actions>
       </ModuleHeader.Root>
 
@@ -537,9 +563,24 @@ export default function Module06TasksRoute({ loaderData }: Route.ComponentProps)
               </div>
             )}
 
-            <span className="text-xs text-slate-600 tabular-nums">
-              Hiển thị <strong>{tasks.length}</strong> nhiệm vụ
-            </span>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <div className="relative w-full sm:w-64">
+                <Search
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400"
+                />
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Tìm có dấu hoặc không dấu…"
+                  aria-label="Tìm kiếm nhiệm vụ có dấu hoặc không dấu"
+                  className="h-8 pl-8 text-xs"
+                />
+              </div>
+              <span className="text-xs text-slate-600 tabular-nums">
+                Hiển thị <strong>{filteredTasks.length}</strong>/{tasks.length} nhiệm vụ
+              </span>
+            </div>
           </div>
 
           <div className="rounded-lg border border-slate-200 overflow-x-auto">
@@ -554,17 +595,17 @@ export default function Module06TasksRoute({ loaderData }: Route.ComponentProps)
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {tasks.length === 0 ? (
+                {filteredTasks.length === 0 ? (
                   <TableRow>
                     <TableCell
                       colSpan={5}
                       className="py-8 text-center text-xs text-slate-500 whitespace-normal"
                     >
-                      Chưa có nhiệm vụ nào trong phạm vi bộ phận đang chọn.
+                      Không có nhiệm vụ nào khớp điều kiện lọc hiện tại.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  tasks.map((t) => (
+                  filteredTasks.map((t) => (
                     <TableRow key={t.id}>
                       <TableCell className="whitespace-normal min-w-[230px] align-top">
                         <div className="flex items-start gap-2 flex-wrap">
@@ -635,17 +676,19 @@ export default function Module06TasksRoute({ loaderData }: Route.ComponentProps)
                               +25%
                             </Button>
                           )}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={busy}
-                            onClick={() => void handlePatchTask(t, { remind: true })}
-                            className="h-7 px-2 text-[11px] gap-1 text-amber-800 border-amber-300 hover:bg-amber-50 whitespace-nowrap tabular-nums"
-                          >
-                            <BellRing aria-hidden="true" className="h-3 w-3" />
-                            Nhắc ({t.reminder_count})
-                          </Button>
+                          {canAssignTasks && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={busy}
+                              onClick={() => void handlePatchTask(t, { remind: true })}
+                              className="h-7 px-2 text-[11px] gap-1 text-amber-800 border-amber-300 hover:bg-amber-50 whitespace-nowrap tabular-nums"
+                            >
+                              <BellRing aria-hidden="true" className="h-3 w-3" />
+                              Nhắc ({t.reminder_count})
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
