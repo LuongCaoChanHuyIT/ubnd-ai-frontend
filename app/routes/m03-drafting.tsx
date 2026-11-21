@@ -280,7 +280,7 @@ export default function Module03DraftingRoute() {
                     aria-label="Loại văn bản hành chính"
                     className="w-full min-w-0"
                   >
-                    <SelectValue />
+                    <SelectValue>{docType}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {ADMIN_DOC_TYPES.map((t) => (
@@ -304,7 +304,9 @@ export default function Module03DraftingRoute() {
                     aria-label="Thẩm quyền ký ban hành"
                     className="w-full min-w-0"
                   >
-                    <SelectValue />
+                    <SelectValue>
+                      {AUTHORITY_MODES.find((m) => m.id === authorityMode)?.label}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {AUTHORITY_MODES.map((m) => (

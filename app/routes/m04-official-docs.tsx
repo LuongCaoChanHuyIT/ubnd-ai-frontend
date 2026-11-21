@@ -4,6 +4,7 @@ import {
   useOutletContext,
   useRevalidator,
   useSearchParams,
+  type ShouldRevalidateFunctionArgs,
 } from "react-router";
 import {
   AlertTriangle,
@@ -86,6 +87,28 @@ import { cn } from "~/lib/utils";
 
 export function meta({}: Route.MetaArgs) {
   return [{ title: "Mô-đun 04 · Nguồn văn bản chính thức — UBND Xã, Phường" }];
+}
+
+export function shouldRevalidate({
+  currentUrl,
+  nextUrl,
+  formMethod,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs): boolean {
+  if (formMethod) return defaultShouldRevalidate;
+  if (currentUrl.href === nextUrl.href) return true;
+  if (
+    currentUrl.pathname === nextUrl.pathname &&
+    (currentUrl.searchParams.get("dept") ?? "VP") ===
+      (nextUrl.searchParams.get("dept") ?? "VP") &&
+    (currentUrl.searchParams.get("q") ?? "") ===
+      (nextUrl.searchParams.get("q") ?? "") &&
+    (currentUrl.searchParams.get("tier") ?? "") ===
+      (nextUrl.searchParams.get("tier") ?? "")
+  ) {
+    return false;
+  }
+  return defaultShouldRevalidate;
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -203,7 +226,7 @@ export default function Module04OfficialDocsRoute({
     next.set("dept", deptId);
     if (normalized === "de_nghi") next.set("tab", "de_nghi");
     else next.delete("tab");
-    setSearchParams(next);
+    setSearchParams(next, { preventScrollReset: true });
   }
 
   function setTierFilter(nextTier: string) {
@@ -211,7 +234,7 @@ export default function Module04OfficialDocsRoute({
     next.set("dept", deptId);
     if (nextTier === "all") next.delete("tier");
     else next.set("tier", nextTier);
-    setSearchParams(next);
+    setSearchParams(next, { preventScrollReset: true });
   }
 
   function canEditSpecificDoc(doc: OfficialDoc): boolean {

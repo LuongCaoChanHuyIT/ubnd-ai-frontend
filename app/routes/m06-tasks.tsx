@@ -168,7 +168,7 @@ export default function Module06TasksRoute({ loaderData }: Route.ComponentProps)
     } else {
       next.set("filterDept", nextFilter);
     }
-    setSearchParams(next);
+    setSearchParams(next, { preventScrollReset: true });
   }
 
   async function handleCreateTask(ev: React.FormEvent) {

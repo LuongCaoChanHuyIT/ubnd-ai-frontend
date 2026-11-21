@@ -264,7 +264,11 @@ test("Final review fixes: ND30 two-column footer + long commune header, manual t
   assert.match(m06Src, /<Progress[^>]*aria-label=/);
 });
 
-test("UI smoothness upgrades: parallel layout loader, shouldRevalidate, prefetch=intent, top progress shimmer, optimistic M01 turn, deferred search, and GPU button transitions", () => {
+test("Anti-jitter & UI smoothness invariants: zero double-VT clash, stable scrollbar gutter, instant tab shouldRevalidate, optimistic dept select, pinned M01 composer scrollTo, and flicker-free login", () => {
+  const cssSrc = fs.readFileSync(path.join(APP_DIR, "app/app.css"), "utf-8");
+  assert.match(cssSrc, /scrollbar-gutter:\s*stable/);
+  assert.match(cssSrc, /\.civic-nav-progress/);
+
   const layoutSrc = fs.readFileSync(
     path.join(APP_DIR, "app/routes/workspace-layout.tsx"),
     "utf-8",
@@ -276,27 +280,35 @@ test("UI smoothness upgrades: parallel layout loader, shouldRevalidate, prefetch
     path.join(APP_DIR, "app/components/layout/workspace-shell.tsx"),
     "utf-8",
   );
-  assert.match(shellSrc, /prefetch="intent"/);
   assert.match(shellSrc, /useNavigation/);
   assert.match(shellSrc, /civic-nav-progress/);
+  assert.match(shellSrc, /optimisticDeptParam/);
+  // Must NOT wrap <Outlet /> in a route-keyed <ViewTransition> or put prefetch="intent" / viewTransition on all 12 sidebar links
+  assert.doesNotMatch(shellSrc, /key=\{location\.pathname\}/);
+  assert.doesNotMatch(shellSrc, /prefetch="intent"/);
+  assert.doesNotMatch(shellSrc, /backdrop-blur/);
 
-  const btnSrc = fs.readFileSync(
-    path.join(APP_DIR, "app/components/ui/button.tsx"),
+  const m04Src = fs.readFileSync(
+    path.join(APP_DIR, "app/routes/m04-official-docs.tsx"),
     "utf-8",
   );
-  assert.doesNotMatch(btnSrc, /\btransition-all\b/);
-  assert.match(btnSrc, /scale-\[0\.985\]/);
+  assert.match(m04Src, /export function shouldRevalidate/);
 
-  const cssSrc = fs.readFileSync(path.join(APP_DIR, "app/app.css"), "utf-8");
-  assert.match(cssSrc, /\.civic-nav-progress/);
-  assert.match(cssSrc, /content-visibility:\s*auto/);
+  const m07Src = fs.readFileSync(
+    path.join(APP_DIR, "app/routes/m07-admin.tsx"),
+    "utf-8",
+  );
+  assert.match(m07Src, /export function shouldRevalidate/);
+  assert.match(m07Src, /useDeferredValue/);
+  assert.doesNotMatch(m07Src, /\bcv-auto\b/);
 
   const m01Src = fs.readFileSync(
     path.join(APP_DIR, "app/routes/m01-assistant.tsx"),
     "utf-8",
   );
   assert.match(m01Src, /pendingUserMessage/);
-  assert.match(m01Src, /scrollIntoView/);
+  assert.doesNotMatch(m01Src, /scrollIntoView/);
+  assert.match(m01Src, /scrollTo\(/);
 
   const m06Src = fs.readFileSync(
     path.join(APP_DIR, "app/routes/m06-tasks.tsx"),
@@ -304,9 +316,16 @@ test("UI smoothness upgrades: parallel layout loader, shouldRevalidate, prefetch
   );
   assert.match(m06Src, /useDeferredValue/);
 
-  const m07Src = fs.readFileSync(
-    path.join(APP_DIR, "app/routes/m07-admin.tsx"),
+  const loginSrc = fs.readFileSync(
+    path.join(APP_DIR, "app/routes/login.tsx"),
     "utf-8",
   );
-  assert.match(m07Src, /useDeferredValue/);
+  assert.doesNotMatch(loginSrc, /finally\s*\{\s*setBusy\(false\)/);
+
+  const btnSrc = fs.readFileSync(
+    path.join(APP_DIR, "app/components/ui/button.tsx"),
+    "utf-8",
+  );
+  assert.doesNotMatch(btnSrc, /\btransition-all\b/);
+  assert.match(btnSrc, /scale-\[0\.985\]/);
 });

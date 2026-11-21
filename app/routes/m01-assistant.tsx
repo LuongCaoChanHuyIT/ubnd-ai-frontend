@@ -62,7 +62,7 @@ import { FormattedMarkdown } from "~/components/ui/formatted-markdown";
 import { Textarea } from "~/components/ui/textarea";
 import { cn } from "~/lib/utils";
 
-export function meta({}: Route.MetaArgs) {
+export function meta({ }: Route.MetaArgs) {
   return [{ title: "Mô-đun 01 · Trợ lý AI theo nghiệp vụ — UBND Xã, Phường" }];
 }
 
@@ -130,11 +130,12 @@ export default function Module01AssistantRoute({
   );
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (messages.length > 0 || pendingUserMessage) {
-      chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    const el = chatScrollRef.current;
+    if (el && (messages.length > 0 || pendingUserMessage)) {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
     }
   }, [messages.length, pendingUserMessage]);
 
@@ -312,10 +313,10 @@ export default function Module01AssistantRoute({
       prevMsg?.role === "user"
         ? `Xử lý nghiệp vụ: ${prevMsg.content.trim().slice(0, 110)}`
         : msg.content
-            .replace(/[#*`|>]/g, "")
-            .split(/\r?\n/)
-            .map((s) => s.trim())
-            .find(Boolean) ?? `Triển khai nội dung tư vấn phòng ${deptId}`;
+          .replace(/[#*`|>]/g, "")
+          .split(/\r?\n/)
+          .map((s) => s.trim())
+          .find(Boolean) ?? `Triển khai nội dung tư vấn phòng ${deptId}`;
     const cleanDesc = msg.content
       .replace(/[#*`|]/g, "")
       .replace(/\s+/g, " ")
@@ -448,7 +449,7 @@ export default function Module01AssistantRoute({
                   className={cn(
                     "py-2.5",
                     statusBanner.tone === "info" &&
-                      "border-emerald-200 bg-emerald-50 text-emerald-900",
+                    "border-emerald-200 bg-emerald-50 text-emerald-900",
                   )}
                 >
                   <AlertDescription className="text-xs">
@@ -492,7 +493,6 @@ export default function Module01AssistantRoute({
                 ))}
                 <Link
                   to={`/xu-ly-tai-lieu?dept=${deptId}`}
-                  viewTransition
                   className="ml-auto text-xs font-medium text-[#1B4D89] hover:underline whitespace-nowrap"
                 >
                   Mở Xử lý & Đối chiếu tệp →
@@ -502,10 +502,13 @@ export default function Module01AssistantRoute({
           </div>
         )}
 
-        {/* Conversation Body or Center Empty State */}
-        <div className="px-5 sm:px-6 py-6 min-h-[300px] flex flex-col justify-center">
+        {/* Conversation Body or Center Empty State (Constant-height internal scroll container so composer never jumps) */}
+        <div
+          ref={chatScrollRef}
+          className="px-5 sm:px-6 py-5 h-[360px] sm:h-[420px] overflow-y-auto [scrollbar-gutter:stable] flex flex-col"
+        >
           {messages.length === 0 && !pendingUserMessage ? (
-            <div className="mx-auto max-w-lg text-center space-y-4 py-6">
+            <div className="m-auto max-w-lg text-center space-y-4 py-4">
               <div className="mx-auto flex justify-center">
                 <CivicCrest className="h-12 w-12" />
               </div>
@@ -535,16 +538,13 @@ export default function Module01AssistantRoute({
               </div>
             </div>
           ) : (
-            <div className="space-y-4 max-h-[520px] overflow-y-auto pr-1">
-              {messages.map((msg, idx) => {
-                const isUser = msg.role === "user";
-                return (
-                  <ViewTransition
-                    key={`${msg.created_at}-${idx}`}
-                    enter="slide-up"
-                    default="none"
-                  >
+            <ViewTransition enter="fade-in" default="none">
+              <div className="space-y-4">
+                {messages.map((msg, idx) => {
+                  const isUser = msg.role === "user";
+                  return (
                     <div
+                      key={`${msg.created_at}-${idx}`}
                       className={cn(
                         "flex flex-col gap-1.5",
                         isUser ? "items-end" : "items-start",
@@ -617,33 +617,31 @@ export default function Module01AssistantRoute({
                         )}
                       </div>
                     </div>
-                  </ViewTransition>
-                );
-              })}
+                  );
+                })}
 
-              {pendingUserMessage && (
-                <div className="space-y-3" role="status" aria-live="polite">
-                  <div className="flex flex-col items-end gap-1.5">
-                    <div className="max-w-3xl rounded-2xl bg-[#1B4D89] px-4 py-3 text-sm leading-relaxed text-white whitespace-pre-wrap opacity-95">
-                      {pendingUserMessage}
+                {pendingUserMessage && (
+                  <div className="space-y-3" role="status" aria-live="polite">
+                    <div className="flex flex-col items-end gap-1.5">
+                      <div className="max-w-3xl rounded-2xl bg-[#1B4D89] px-4 py-3 text-sm leading-relaxed text-white whitespace-pre-wrap opacity-95">
+                        {pendingUserMessage}
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-start gap-1.5">
+                      <div className="max-w-xl rounded-2xl border border-[#E5DEC9] bg-[#FCFBF7] px-4 py-3 text-xs text-slate-700 flex items-center gap-2.5">
+                        <span
+                          aria-hidden="true"
+                          className="inline-flex h-2 w-2 rounded-full bg-[#D97706] animate-pulse"
+                        />
+                        <span>
+                          Trợ lý AI đang đối chiếu căn cứ pháp lý và tổng hợp nội dung…
+                        </span>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex flex-col items-start gap-1.5">
-                    <div className="max-w-xl rounded-2xl border border-[#E5DEC9] bg-[#FCFBF7] px-4 py-3 text-xs text-slate-700 flex items-center gap-2.5">
-                      <span
-                        aria-hidden="true"
-                        className="inline-flex h-2 w-2 rounded-full bg-[#D97706] animate-pulse"
-                      />
-                      <span>
-                        Trợ lý AI đang đối chiếu căn cứ pháp lý và tổng hợp nội dung…
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div ref={chatEndRef} />
-            </div>
+                )}
+              </div>
+            </ViewTransition>
           )}
         </div>
 

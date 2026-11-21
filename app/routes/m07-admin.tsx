@@ -4,6 +4,7 @@ import {
   useOutletContext,
   useRevalidator,
   useSearchParams,
+  type ShouldRevalidateFunctionArgs,
 } from "react-router";
 import {
   AlertTriangle,
@@ -91,8 +92,26 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { Textarea } from "~/components/ui/textarea";
 
-export function meta({}: Route.MetaArgs) {
+export function meta({ }: Route.MetaArgs) {
   return [{ title: "Mô-đun 07 · Phân quyền & Quản trị hệ thống — UBND Xã, Phường" }];
+}
+
+export function shouldRevalidate({
+  currentUrl,
+  nextUrl,
+  formMethod,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs): boolean {
+  if (formMethod) return defaultShouldRevalidate;
+  if (currentUrl.href === nextUrl.href) return true;
+  if (
+    currentUrl.pathname === nextUrl.pathname &&
+    (currentUrl.searchParams.get("dept") ?? "VP") ===
+      (nextUrl.searchParams.get("dept") ?? "VP")
+  ) {
+    return false;
+  }
+  return defaultShouldRevalidate;
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -274,7 +293,7 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
           </CardHeader>
           <CardContent className="flex justify-center pb-6">
             <Button asChild className="bg-[#1B4D89] hover:bg-[#163E70] text-white gap-2">
-              <Link to={`/?dept=${deptId}`} viewTransition>
+              <Link to={`/?dept=${deptId}`}>
                 <ArrowLeft aria-hidden="true" className="h-4 w-4" />
                 Quay về Trợ lý nghiệp vụ (Mô-đun 01 · Phòng {deptId})
               </Link>
@@ -290,7 +309,7 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
     const params = new URLSearchParams(searchParams);
     params.set("dept", deptId);
     params.set("tab", tab);
-    setSearchParams(params);
+    setSearchParams(params, { preventScrollReset: true });
     setBanner(null);
   }
 
@@ -1431,26 +1450,26 @@ export default function Module07AdminRoute({ loaderData }: Route.ComponentProps)
                         ),
                       )
                       .map((log) => (
-                      <TableRow key={log.id} className="text-xs cv-auto">
-                        <TableCell className="text-slate-600 font-mono text-[11px] whitespace-nowrap align-top tabular-nums">
-                          {log.created_at.slice(0, 19).replace("T", " ")}
-                        </TableCell>
-                        <TableCell className="font-medium whitespace-nowrap align-top">
-                          {log.actor_email}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap align-top">
-                          <Badge variant="outline" className="text-[10px]">
-                            {log.module_code} · {log.department_id}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="font-mono text-[11px] text-[#1B4D89] whitespace-nowrap align-top">
-                          {log.action}
-                        </TableCell>
-                        <TableCell className="text-slate-700 whitespace-normal min-w-[220px] align-top">
-                          {log.detail}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                        <TableRow key={log.id} className="text-xs">
+                          <TableCell className="text-slate-600 font-mono text-[11px] whitespace-nowrap align-top tabular-nums">
+                            {log.created_at.slice(0, 19).replace("T", " ")}
+                          </TableCell>
+                          <TableCell className="font-medium whitespace-nowrap align-top">
+                            {log.actor_email}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap align-top">
+                            <Badge variant="outline" className="text-[10px]">
+                              {log.module_code} · {log.department_id}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-mono text-[11px] text-[#1B4D89] whitespace-nowrap align-top">
+                            {log.action}
+                          </TableCell>
+                          <TableCell className="text-slate-700 whitespace-normal min-w-[220px] align-top">
+                            {log.detail}
+                          </TableCell>
+                        </TableRow>
+                      ))}
                   </TableBody>
                 </Table>
               </div>

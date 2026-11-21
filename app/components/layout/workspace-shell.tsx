@@ -1,4 +1,4 @@
-import { useEffect, useState, ViewTransition } from "react";
+import { useEffect, useState } from "react";
 import {
   Link,
   Outlet,
@@ -33,6 +33,7 @@ import {
 import {
   LEGAL_DISCLAIMER_TEXT,
   logoutSession,
+  normalizeDepartmentId,
   type Department,
   type DepartmentId,
   type RbacUser,
@@ -238,8 +239,13 @@ export function WorkspaceShell({
       created_at: "",
     };
 
+  const optimisticDeptParam = navigation.location
+    ? new URLSearchParams(navigation.location.search).get("dept")
+    : null;
   const effectiveDeptId = resolveEffectiveDepartmentForUser(
-    currentDeptId,
+    optimisticDeptParam
+      ? normalizeDepartmentId(optimisticDeptParam)
+      : currentDeptId,
     currentUser,
   );
   const deptLocked = isDepartmentLockedForRole(currentUser.role);
@@ -330,12 +336,10 @@ export function WorkspaceShell({
       <Link
         key={item.id}
         to={buildHref(item.pathname, item.tab)}
-        prefetch="intent"
-        viewTransition
         aria-current={active ? "page" : undefined}
         onClick={() => setMobileOpen(false)}
         className={cn(
-          "relative flex min-h-[40px] items-center gap-2.5 rounded-lg px-3 py-2 text-[12.5px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/80",
+          "relative flex min-h-[38px] items-center gap-2.5 rounded-lg px-3 py-1.5 text-[12.5px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/80",
           active
             ? "bg-[#1B4D89] text-white shadow-2xs"
             : "text-slate-300 hover:bg-[#152C4A] hover:text-white",
@@ -343,16 +347,10 @@ export function WorkspaceShell({
       >
         {active &&
           (variant === "desktop" ? (
-            <ViewTransition
-              name="sidebar-active-pill"
-              share="nav-active-pill"
-              default="none"
-            >
-              <span
-                aria-hidden="true"
-                className="absolute left-0 inset-y-1.5 w-1 rounded-r-full bg-[#F59E0B]"
-              />
-            </ViewTransition>
+            <span
+              aria-hidden="true"
+              className="absolute left-0 inset-y-1.5 w-1 rounded-r-full bg-[#F59E0B]"
+            />
           ) : (
             <span
               aria-hidden="true"
@@ -466,7 +464,9 @@ export function WorkspaceShell({
                 aria-label="Chọn không gian phòng chuyên môn"
                 className="h-9 w-full border-white/15 bg-[#0C1E35] text-xs font-medium text-slate-100 disabled:opacity-80"
               >
-                <SelectValue placeholder="Chọn phòng ban…" />
+                <SelectValue placeholder="Chọn phòng ban…">
+                  {currentDept.name}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {departments.map((d) => (
@@ -484,7 +484,7 @@ export function WorkspaceShell({
             )}
 
             <div className="flex items-start gap-2">
-              <span className="mt-0.5 inline-flex h-5 shrink-0 items-center rounded bg-[#1B4D89] px-1.5 text-[10px] font-bold text-white">
+              <span className="mt-0.5 inline-flex h-5 min-w-[42px] shrink-0 items-center justify-center rounded bg-[#1B4D89] px-1.5 text-[10px] font-bold text-white">
                 {currentDept.code}
               </span>
               <p className="text-[11px] leading-snug text-slate-300 line-clamp-2">
@@ -591,7 +591,7 @@ export function WorkspaceShell({
   }
 
   return (
-    <div className="flex min-h-screen w-full bg-[#F6F7F9] text-slate-900">
+    <div className="flex h-dvh w-full overflow-hidden bg-[#F6F7F9] text-slate-900">
       {/* Keyboard Skip Link */}
       <a
         href="#main-workspace"
@@ -603,15 +603,15 @@ export function WorkspaceShell({
       {/* Desktop Fixed Sidebar */}
       <aside
         style={{ viewTransitionName: "persistent-nav" }}
-        className="hidden lg:block w-[272px] shrink-0 sticky top-0 h-screen"
+        className="hidden lg:block w-[272px] shrink-0 h-full"
       >
         {renderSidebar("desktop")}
       </aside>
 
-      {/* Main Content Column */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      {/* Main Content Column (Viewport-locked so body scrollbar never pops or shifts) */}
+      <div className="flex min-w-0 flex-1 flex-col h-full overflow-hidden">
         {/* Top Header */}
-        <header className="sticky top-0 z-20 flex h-[68px] items-center justify-between gap-3 border-b border-slate-200/90 bg-white/95 backdrop-blur-xs px-4 lg:px-7">
+        <header className="relative z-20 flex h-[64px] shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 lg:px-7">
           {isRoutePending ? (
             <div
               aria-hidden="true"
@@ -686,11 +686,7 @@ export function WorkspaceShell({
               size="sm"
               className="hidden sm:inline-flex gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-50"
             >
-              <Link
-                to={buildHref("/xu-ly-tai-lieu")}
-                prefetch="intent"
-                viewTransition
-              >
+              <Link to={buildHref("/xu-ly-tai-lieu")}>
                 <Upload aria-hidden="true" className="h-3.5 w-3.5" />
                 Tải tài liệu phiên
               </Link>
@@ -700,11 +696,7 @@ export function WorkspaceShell({
               size="sm"
               className="bg-[#1B4D89] hover:bg-[#153E70] text-white gap-1.5"
             >
-              <Link
-                to={buildHref("/soan-thao-kiem-tra")}
-                prefetch="intent"
-                viewTransition
-              >
+              <Link to={buildHref("/soan-thao-kiem-tra")}>
                 <Plus aria-hidden="true" className="h-3.5 w-3.5" />
                 Soạn & kiểm tra NĐ30
               </Link>
@@ -712,26 +704,17 @@ export function WorkspaceShell({
           </div>
         </header>
 
-        {/* Active Module Workspace */}
+        {/* Active Module Workspace (Dedicated scroll container with stable scrollbar gutter) */}
         <main
           id="main-workspace"
           tabIndex={-1}
-          className="flex-1 p-4 lg:p-6 min-w-0 scroll-mt-20 focus:outline-none"
+          className="flex-1 overflow-y-auto [scrollbar-gutter:stable] p-4 lg:p-6 min-w-0 focus:outline-none"
         >
-          <ViewTransition
-            key={location.pathname}
-            enter="fade-in"
-            exit="fade-out"
-            default="none"
-          >
-            <div className="min-w-0">
-              <Outlet context={outletContext} />
-            </div>
-          </ViewTransition>
+          <Outlet context={outletContext} />
         </main>
 
         {/* Verbatim Legal Accountability Footer */}
-        <footer className="border-t border-slate-200 bg-white px-4 lg:px-7 py-2.5 text-center text-xs text-slate-600">
+        <footer className="shrink-0 border-t border-slate-200 bg-white px-4 lg:px-7 py-2 text-center text-xs text-slate-600">
           <span className="font-semibold text-slate-900">Nguyên tắc sử dụng: </span>
           {LEGAL_DISCLAIMER_TEXT}
         </footer>

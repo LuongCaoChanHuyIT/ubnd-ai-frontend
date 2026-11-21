@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { redirect, useNavigate, useSearchParams } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { redirect, useNavigate, useNavigation, useSearchParams } from "react-router";
 import {
   Building2,
   CheckCircle2,
@@ -174,9 +174,11 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export default function LoginRoute({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
+  const navigation = useNavigation();
   const [searchParams] = useSearchParams();
 
   const [tenantSlug, setTenantSlug] = useState(loaderData.activeTenantSlug);
+  const lastFetchedTenantRef = useRef(loaderData.activeTenantSlug);
   const [accounts, setAccounts] = useState<RbacUser[]>(loaderData.demoAccounts);
   const [communeName, setCommuneName] = useState(loaderData.communeName);
   const [email, setEmail] = useState(
@@ -186,14 +188,19 @@ export default function LoginRoute({ loaderData }: Route.ComponentProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const isSubmitting = busy || navigation.state !== "idle";
 
   useEffect(() => {
+    if (tenantSlug === lastFetchedTenantRef.current) {
+      return;
+    }
     let cancelled = false;
     void apiRequest<AuthAccountsPayload>(
       `/api/auth/accounts?tenant_slug=${encodeURIComponent(tenantSlug)}`,
     )
       .then((res) => {
         if (cancelled) return;
+        lastFetchedTenantRef.current = tenantSlug;
         setCommuneName(res.commune_name);
         if (res.demo_accounts.length > 0) {
           setAccounts(res.demo_accounts);
@@ -226,11 +233,10 @@ export default function LoginRoute({ loaderData }: Route.ComponentProps) {
       });
       navigate(resolveDestination(res.user), { replace: true });
     } catch (err) {
+      setBusy(false);
       setErrorMsg(
         err instanceof Error ? err.message : "Không thể đăng nhập vào hệ thống.",
       );
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -344,7 +350,9 @@ export default function LoginRoute({ loaderData }: Route.ComponentProps) {
                         aria-label="Chọn đơn vị UBND xã phường"
                         className="w-full"
                       >
-                        <SelectValue />
+                        <SelectValue>
+                          {communeName} ({tenantSlug})
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {loaderData.availableTenants.map((t) => (
@@ -414,11 +422,13 @@ export default function LoginRoute({ loaderData }: Route.ComponentProps) {
 
                 <Button
                   type="submit"
-                  disabled={busy}
+                  disabled={isSubmitting}
                   className="w-full bg-[#1B4D89] hover:bg-[#163E70] text-white gap-2 h-10"
                 >
                   <LogIn aria-hidden="true" className="h-4 w-4" />
-                  {busy ? "Đang xác thực phiên…" : "Đăng nhập vào không gian làm việc"}
+                  {isSubmitting
+                    ? "Đang xác thực phiên…"
+                    : "Đăng nhập vào không gian làm việc"}
                 </Button>
               </form>
             </CardContent>
@@ -534,7 +544,7 @@ export default function LoginRoute({ loaderData }: Route.ComponentProps) {
                           type="button"
                           size="sm"
                           variant="outline"
-                          disabled={busy}
+                          disabled={isSubmitting}
                           onClick={() => {
                             setEmail(acc.email);
                             setPassword(DEMO_DEFAULT_PASSWORD);
@@ -546,7 +556,7 @@ export default function LoginRoute({ loaderData }: Route.ComponentProps) {
                         <Button
                           type="button"
                           size="sm"
-                          disabled={busy}
+                          disabled={isSubmitting}
                           onClick={() => {
                             setEmail(acc.email);
                             setPassword(DEMO_DEFAULT_PASSWORD);

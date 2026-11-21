@@ -36,7 +36,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
-        <TooltipProvider>{children}</TooltipProvider>
+        <TooltipProvider delayDuration={250}>{children}</TooltipProvider>
         <ScrollRestoration />
         <Scripts />
       </body>
